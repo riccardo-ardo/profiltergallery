@@ -269,6 +269,7 @@ class ProFilterGallery extends HTMLElement {
     this.bindWixData();
     this.renderCards();
     this.setupAutoHeight();
+    this.loadCMSData();
   }
 
   disconnectedCallback() {
@@ -572,6 +573,64 @@ class ProFilterGallery extends HTMLElement {
     setTimeout(sendHeight, 1200);
   }
 
+  async loadCMSData() {
+  try {
+    // 🔥 Get Wix instance (contains site info + auth)
+    const urlParams = new URLSearchParams(window.location.search);
+    const instance = urlParams.get("instance");
+
+    if (!instance) {
+      console.warn("No Wix instance found — skipping CMS load");
+      return;
+    }
+
+    // 🔥 YOUR COLLECTION ID (already correct)
+    const collectionId = "portfolio-projects";
+
+    // 🔥 Wix Data REST endpoint
+    const response = await fetch(`https://www.wixapis.com/wix-data/v2/items/query`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": instance
+      },
+      body: JSON.stringify({
+        dataCollectionId: collectionId,
+        query: {
+          sort: [{ fieldName: "order", order: "ASC" }]
+        }
+      })
+    });
+
+    const data = await response.json();
+
+    if (!data?.dataItems?.length) {
+      console.warn("No CMS items found");
+      return;
+    }
+
+    const projects = data.dataItems.map((item, index) => {
+      const f = item.data || {};
+
+      return {
+        id: item._id || `project-${index + 1}`,
+        title: f.title || "Untitled Project",
+        category: f.category || "Uncategorized",
+        description: this.extractText(f.description),
+        coverImage: this.normalizeImage(f.coverImage),
+        images: this.normalizeImages(f.images),
+        order: typeof f.order === "number" ? f.order : index + 1,
+        visible: f.visible !== false
+      };
+    });
+
+    this.setProjects(projects);
+
+  } catch (err) {
+    console.error("CMS LOAD FAILED:", err);
+  }
+}
+  
   getStyles() {
     return `
       <style>
