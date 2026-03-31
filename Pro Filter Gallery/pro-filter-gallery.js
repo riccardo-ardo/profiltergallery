@@ -75,6 +75,7 @@ class ProFilterGallery extends HTMLElement {
 
   static get observedAttributes() {
     return [
+      "instance",
       "projects",
       "accent",
       "background",
@@ -111,6 +112,11 @@ class ProFilterGallery extends HTMLElement {
   }
 
   attributeChangedCallback(name, oldValue, newValue) {
+    if (name === "instance" && newValue && newValue !== oldValue) {
+  this.loadCMSData();
+  return;
+}
+     
     if (oldValue === newValue) return;
 
     switch (name.toLowerCase()) {
@@ -269,7 +275,6 @@ class ProFilterGallery extends HTMLElement {
     this.bindWixData();
     this.renderCards();
     this.setupAutoHeight();
-    this.loadCMSData();
   }
 
   disconnectedCallback() {
@@ -576,33 +581,38 @@ class ProFilterGallery extends HTMLElement {
   async loadCMSData() {
   try {
     // 🔥 Get Wix instance (contains site info + auth)
-    const urlParams = new URLSearchParams(window.location.search);
-    const instance = urlParams.get("instance");
+    const instance = this.getAttribute("instance");
 
-    if (!instance) {
-      console.warn("No Wix instance found — skipping CMS load");
-      return;
-    }
+if (!instance) {
+  console.warn("No instance yet — waiting...");
+  return;
+}
 
     // 🔥 YOUR COLLECTION ID (already correct)
-    const collectionId = "portfolio-projects";
+    const collectionId = "@ardoproductions/profiltergallery/portfolio-projects";
 
     // 🔥 Wix Data REST endpoint
     const response = await fetch(`https://www.wixapis.com/wix-data/v2/items/query`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": instance
-      },
-      body: JSON.stringify({
-        dataCollectionId: collectionId,
-        query: {
-          sort: [{ fieldName: "order", order: "ASC" }]
-        }
-      })
-    });
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+    "Authorization": instance
+  },
+  body: JSON.stringify({
+    dataCollectionId: collectionId,
+    query: {
+      sort: [{ fieldName: "order", order: "ASC" }]
+    }
+  })
+});
 
-    const data = await response.json();
+if (!response.ok) {
+  const errorText = await response.text();
+  console.error("CMS RESPONSE ERROR:", response.status, errorText);
+  return;
+}
+
+const data = await response.json();
 
     if (!data?.dataItems?.length) {
       console.warn("No CMS items found");
@@ -616,9 +626,13 @@ class ProFilterGallery extends HTMLElement {
         id: item._id || `project-${index + 1}`,
         title: f.title || "Untitled Project",
         category: f.category || "Uncategorized",
-        description: this.extractText(f.description),
         coverImage: this.normalizeImage(f.coverImage),
-        images: this.normalizeImages(f.images),
+        description: f.description || "",
+images: Array.isArray(f.images)
+  ? f.images.map((img) => this.normalizeImage(img)).filter(Boolean)
+  : f.images
+    ? [this.normalizeImage(f.images)].filter(Boolean)
+    : [],
         order: typeof f.order === "number" ? f.order : index + 1,
         visible: f.visible !== false
       };
