@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>Settings Panel</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    :root {
+      --bg: #0b0d11;
+      --panel: #12151c;
+      --panel-2: #171b23;
+      --border: rgba(255,255,255,0.08);
+      --border-soft: rgba(255,255,255,0.05);
+      --text: #ffffff;
+      --muted: rgba(255,255,255,0.62);
+      --accent: #4d8dff;
+      --radius-lg: 18px;
+      --radius-md: 12px;
+      --radius-sm: 10px;
+    }
+
+    body {
+      margin: 0;
+      font-family: Inter, Arial, sans-serif;
+      padding: 18px;
+      background:
+        radial-gradient(circle at top left, rgba(77,141,255,0.08), transparent 24%),
+        linear-gradient(180deg, #0a0c10 0%, #0b0d11 100%);
+      color: var(--text);
+    }
+
+    .panel-wrap {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .panel-header {
+      padding: 4px 2px 2px;
+    }
+
+    .panel-title {
+      margin: 0 0 6px;
+      font-size: 22px;
+      line-height: 1.02;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+    }
+
+    .panel-subtitle {
+      margin: 0;
+      font-size: 13px;
+      line-height: 1.55;
+      color: var(--muted);
+    }
+
+    .section-card {
+      background: linear-gradient(180deg, var(--panel) 0%, var(--panel-2) 100%);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 16px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.18);
+    }
+
+    .section-title {
+      margin: 0 0 14px;
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--accent);
+    }
+
+    .field-list {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .row {
+      margin: 0;
+    }
+
+    label {
+      display: block;
+      font-size: 12px;
+      font-weight: 700;
+      margin-bottom: 7px;
+      color: rgba(255,255,255,0.92);
+    }
+
+    input,
+    select {
+      width: 100%;
+      border-radius: var(--radius-md);
+      border: 1px solid var(--border-soft);
+      font-size: 14px;
+      font-family: inherit;
+      outline: none;
+      transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+    }
+
+    select {
+      padding: 11px 12px;
+      background: rgba(255,255,255,0.04);
+      color: #ffffff;
+      appearance: none;
+      -webkit-appearance: none;
+    }
+
+    select:focus,
+    input[type="range"]:focus,
+    input[type="color"]:focus {
+      border-color: rgba(77,141,255,0.45);
+      box-shadow: 0 0 0 3px rgba(77,141,255,0.12);
+    }
+
+    input[type="range"] {
+      padding: 0;
+      margin: 0;
+      accent-color: var(--accent);
+      border: none;
+      background: transparent;
+      box-shadow: none;
+    }
+
+    input[type="color"] {
+      width: 100%;
+      height: 46px;
+      padding: 0;
+      border-radius: var(--radius-md);
+      background: transparent;
+      cursor: pointer;
+      overflow: hidden;
+      appearance: none;
+      -webkit-appearance: none;
+    }
+
+    input[type="color"]::-webkit-color-swatch-wrapper {
+      padding: 0;
+      border-radius: var(--radius-md);
+    }
+
+    input[type="color"]::-webkit-color-swatch {
+      border: none;
+      border-radius: var(--radius-md);
+    }
+
+    input[type="color"]::-moz-color-swatch {
+      border: none;
+      border-radius: var(--radius-md);
+    }
+
+    .checkbox-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 12px;
+      border-radius: var(--radius-md);
+      border: 1px solid var(--border-soft);
+      background: rgba(255,255,255,0.03);
+    }
+
+    .checkbox-row input[type="checkbox"] {
+      width: 18px;
+      height: 18px;
+      margin: 0;
+      flex: 0 0 auto;
+      accent-color: var(--accent);
+    }
+
+    .checkbox-row label {
+      margin: 0;
+      font-size: 13px;
+      font-weight: 700;
+      color: rgba(255,255,255,0.92);
+    }
+
+    .split-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    .hint {
+      margin-top: 4px;
+      font-size: 11px;
+      line-height: 1.5;
+      color: var(--muted);
+    }
+
+    @media (max-width: 640px) {
+      body {
+        padding: 14px;
+      }
+
+      .section-card {
+        padding: 14px;
+      }
+
+      .panel-title {
+        font-size: 20px;
+      }
+
+      .split-2 {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="panel-wrap">
+
+    <div class="panel-header">
+      <h1 class="panel-title">Gallery Settings</h1>
+      <p class="panel-subtitle">
+        Refine the look and feel of your portfolio gallery to better match your site.
+      </p>
+    </div>
+
+    <section class="section-card">
+      <h2 class="section-title">Style</h2>
+      <div class="field-list">
+        <div class="row">
+          <label for="accent">Accent Color</label>
+          <input type="color" id="accent" />
+        </div>
+
+        <div class="row">
+          <label for="background">Background Color</label>
+          <input type="color" id="background" />
+        </div>
+
+        <div class="row">
+          <label for="backgroundOpacity">Background Opacity</label>
+          <input type="range" id="backgroundOpacity" min="0" max="1" step="0.01" />
+        </div>
+
+        <div class="row checkbox-row">
+          <input type="checkbox" id="showBackground" />
+          <label for="showBackground">Show Background</label>
+        </div>
+
+        <div class="row">
+          <label for="fontFamily">Font Family</label>
+          <select id="fontFamily">
+            <option value="Inter">Inter</option>
+            <option value="Arial">Arial</option>
+            <option value="Helvetica">Helvetica</option>
+            <option value="Georgia">Georgia</option>
+            <option value="Poppins">Poppins</option>
+            <option value="Montserrat">Montserrat</option>
+          </select>
+        </div>
+      </div>
+    </section>
+
+    <section class="section-card">
+      <h2 class="section-title">Typography</h2>
+      <div class="field-list">
+        <div class="split-2">
+          <div class="row">
+            <label for="titleSize">Title Size</label>
+            <select id="titleSize">
+              <option value="small">Small</option>
+              <option value="medium" selected>Medium</option>
+              <option value="large">Large</option>
+            </select>
+          </div>
+
+          <div class="row">
+            <label for="descSize">Description Size</label>
+            <select id="descSize">
+              <option value="small">Small</option>
+              <option value="medium" selected>Medium</option>
+              <option value="large">Large</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="row">
+          <label for="categorySize">Category Size</label>
+          <select id="categorySize">
+            <option value="small">Small</option>
+            <option value="medium" selected>Medium</option>
+          </select>
+        </div>
+      </div>
+    </section>
+
+    <section class="section-card">
+      <h2 class="section-title">Pills</h2>
+      <div class="field-list">
+        <div class="split-2">
+          <div class="row">
+            <label for="pillActiveBg">Selected Pill Background</label>
+            <input type="color" id="pillActiveBg" />
+          </div>
+
+          <div class="row">
+            <label for="pillActiveText">Selected Pill Text</label>
+            <input type="color" id="pillActiveText" />
+          </div>
+        </div>
+
+        <div class="split-2">
+          <div class="row">
+            <label for="pillBg">Unselected Pill Background</label>
+            <input type="color" id="pillBg" />
+          </div>
+
+          <div class="row">
+            <label for="pillText">Unselected Pill Text</label>
+            <input type="color" id="pillText" />
+          </div>
+        </div>
+
+        <div class="row">
+          <label for="pillBorder">Unselected Pill Border</label>
+          <input type="color" id="pillBorder" />
+        </div>
+      </div>
+    </section>
+
+    <section class="section-card">
+      <h2 class="section-title">Card</h2>
+      <div class="field-list">
+        <div class="row">
+          <label for="cardPanelBg">Card Panel Background</label>
+          <input type="color" id="cardPanelBg" />
+        </div>
+
+        <div class="split-2">
+          <div class="row">
+            <label for="titleColor">Title Color</label>
+            <input type="color" id="titleColor" />
+          </div>
+
+          <div class="row">
+            <label for="descColor">Description Color</label>
+            <input type="color" id="descColor" />
+          </div>
+        </div>
+
+        <div class="row">
+          <label for="categoryColor">Category Color</label>
+          <input type="color" id="categoryColor" />
+        </div>
+
+        <div class="split-2">
+          <div class="row">
+            <label for="radius">Card Radius</label>
+            <input type="range" id="radius" min="0" max="40" step="1" />
+          </div>
+
+          <div class="row">
+            <label for="imageRadius">Image Radius</label>
+            <input type="range" id="imageRadius" min="0" max="40" step="1" />
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section-card">
+      <h2 class="section-title">Modal</h2>
+      <div class="field-list">
+        <div class="row">
+          <label for="modalBg">Modal Background</label>
+          <input type="color" id="modalBg" />
+        </div>
+
+        <div class="split-2">
+          <div class="row">
+            <label for="modalTitleColor">Modal Title Color</label>
+            <input type="color" id="modalTitleColor" />
+          </div>
+
+          <div class="row">
+            <label for="modalDescColor">Modal Description Color</label>
+            <input type="color" id="modalDescColor" />
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section-card">
+      <h2 class="section-title">Layout</h2>
+      <div class="field-list">
+        <div class="split-2">
+          <div class="row">
+            <label for="columns">Desktop Columns</label>
+            <input type="range" id="columns" min="2" max="6" step="1" />
+          </div>
+
+          <div class="row">
+            <label for="gap">Card Gap</label>
+            <input type="range" id="gap" min="8" max="40" step="1" />
+          </div>
+        </div>
+
+        <div class="row">
+          <label for="cardWidth">Mobile Card Width</label>
+          <input type="range" id="cardWidth" min="180" max="340" step="1" />
+        </div>
+
+        <div class="split-2">
+          <div class="row">
+            <label for="textAlign">Text Alignment</label>
+            <select id="textAlign">
+              <option value="left" selected>Left</option>
+              <option value="center">Center</option>
+            </select>
+          </div>
+
+          <div class="row">
+            <label for="imageFit">Image Fit</label>
+            <select id="imageFit">
+              <option value="cover" selected>Cover</option>
+              <option value="contain">Contain</option>
+            </select>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section-card">
+      <h2 class="section-title">Visibility & Effects</h2>
+      <div class="field-list">
+        <div class="row checkbox-row">
+          <input type="checkbox" id="showDescription" />
+          <label for="showDescription">Show Description</label>
+        </div>
+
+        <div class="row checkbox-row">
+          <input type="checkbox" id="showCategory" />
+          <label for="showCategory">Show Category</label>
+        </div>
+
+        <div class="row checkbox-row">
+          <input type="checkbox" id="showShadow" />
+          <label for="showShadow">Show Shadow</label>
+        </div>
+
+        <div class="row checkbox-row">
+          <input type="checkbox" id="hoverEffect" />
+          <label for="hoverEffect">Hover Effect</label>
+        </div>
+      </div>
+    </section>
+
+  </div>
+
+  <script type="module" src="./settings-panel.js"></script>
+</body>
+</html>
