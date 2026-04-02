@@ -79,6 +79,13 @@ async function init() {
   wireResponsivePreview();
   setView(getInitialView());
   renderAll();
+
+  if (window.Wix && Wix.addEventListener) {
+    Wix.addEventListener(Wix.Events.SETTINGS_UPDATED, async () => {
+      await loadStateFromWixProps();
+      renderAll();
+    });
+  }
 }
 
   async function loadStateFromWixProps() {
@@ -98,6 +105,11 @@ async function init() {
     const descsize = await Wix.getProp("descsize");
     const categorysize = await Wix.getProp("categorysize");
     const modalimagefit = await Wix.getProp("modalimagefit");
+    const textpanelstyle = await Wix.getProp("textpanelstyle");
+const overlaystrength = await Wix.getProp("overlaystrength");
+
+if (textpanelstyle) state.design.textPanelStyle = textpanelstyle;
+if (overlaystrength) state.design.overlayStrength = Number(overlaystrength);
 
     if (projectsProp) {
       try {
@@ -242,7 +254,7 @@ async function saveState() {
     });
   }
 
-  function setView(view) {
+function setView(view) {
   activeView = view;
 
   document.querySelectorAll(".view").forEach(v => {
