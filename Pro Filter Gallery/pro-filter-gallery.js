@@ -66,7 +66,6 @@ class ProFilterGallery extends HTMLElement {
     this._resizeObserver = null;
     this._sendHeight = null;
     this._eventsBound = false;
-    this._wixSettingsBound = false;
   }
 
   static get observedAttributes() {
@@ -289,70 +288,12 @@ class ProFilterGallery extends HTMLElement {
     this.applyInitialAttributes();
     this.render();
     this.bindEvents();
-    this.bindWixSettingsListener();
-    this.loadPropsFromWix();
     this.renderCards();
     this.setupAutoHeight();
   }
 
   disconnectedCallback() {
     if (this._resizeObserver) this._resizeObserver.disconnect();
-  }
-
-  async loadPropsFromWix() {
-    if (!window.Wix || typeof Wix.getProp !== "function") return;
-
-    try {
-      const props = [
-        "projects",
-        "accent",
-        "columns",
-        "gap",
-        "radius",
-        "cardpanelbg",
-        "textpanelstyle",
-        "overlaystrength",
-        "showcategory",
-        "showfilters",
-        "enablemodal",
-        "titlesize",
-        "descsize",
-        "categorysize",
-        "modalimagefit"
-      ];
-
-      for (const key of props) {
-        const value = await Wix.getProp(key);
-        if (value === null || value === undefined || value === "") continue;
-
-        if (key === "projects") {
-          try {
-            this.setProjects(JSON.parse(value));
-          } catch (e) {
-            console.warn("Invalid project JSON from Wix", e);
-          }
-        } else {
-          this.setAttribute(key, value);
-        }
-      }
-
-      this.render();
-      this.renderCards();
-      if (this._sendHeight) this._sendHeight();
-    } catch (e) {
-      console.warn("Wix prop load error", e);
-    }
-  }
-
-  bindWixSettingsListener() {
-    if (this._wixSettingsBound) return;
-    this._wixSettingsBound = true;
-
-    if (!window.Wix || !Wix.addEventListener) return;
-
-    Wix.addEventListener(Wix.Events.SETTINGS_UPDATED, async () => {
-      await this.loadPropsFromWix();
-    });
   }
 
   applyInitialAttributes() {
@@ -385,12 +326,6 @@ class ProFilterGallery extends HTMLElement {
     const cleaned = String(value).replace("px", "").trim();
     const n = parseFloat(cleaned);
     return Number.isFinite(n) ? n : fallback;
-  }
-
-  mapSizeToPreset(value) {
-    if (value <= 15) return "small";
-    if (value >= 18) return "large";
-    return "medium";
   }
 
   normalizeFontFamily(value) {
