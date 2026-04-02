@@ -6,35 +6,55 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
   <!-- Wix App SDK — required for widget to render inside Wix editor -->
-  <script src="https://static.parastorage.com/services/js-sdk/1.388.0/app-sdk.js"></script>
+ <script>
+  window.onload = async function () {
+    const gallery = document.querySelector("pro-filter-gallery");
 
-  <script src="./pro-filter-gallery.js" defer></script>
-  <style>
-    html, body {
-      margin: 0;
-      padding: 0;
-      width: 100%;
-      min-height: 100%;
-      background: transparent;
-      overflow-x: hidden;
+    async function hydrateFromWixProps() {
+      if (!window.Wix || typeof Wix.getProp !== "function" || !gallery) return;
+
+      try {
+        const projects = await Wix.getProp("projects");
+        const accent = await Wix.getProp("accent");
+        const columns = await Wix.getProp("columns");
+        const gap = await Wix.getProp("gap");
+        const radius = await Wix.getProp("radius");
+        const cardpanelbg = await Wix.getProp("cardpanelbg");
+        const textpanelstyle = await Wix.getProp("textpanelstyle");
+        const overlaystrength = await Wix.getProp("overlaystrength");
+        const showcategory = await Wix.getProp("showcategory");
+        const showfilters = await Wix.getProp("showfilters");
+        const enablemodal = await Wix.getProp("enablemodal");
+        const titlesize = await Wix.getProp("titlesize");
+        const descsize = await Wix.getProp("descsize");
+        const categorysize = await Wix.getProp("categorysize");
+        const modalimagefit = await Wix.getProp("modalimagefit");
+
+        if (projects) gallery.setAttribute("projects", projects);
+        if (accent) gallery.setAttribute("accent", accent);
+        if (columns) gallery.setAttribute("columns", columns);
+        if (gap) gallery.setAttribute("gap", gap);
+        if (radius) gallery.setAttribute("radius", radius);
+        if (cardpanelbg) gallery.setAttribute("cardpanelbg", cardpanelbg);
+        if (textpanelstyle) gallery.setAttribute("textpanelstyle", textpanelstyle);
+        if (overlaystrength) gallery.setAttribute("overlaystrength", overlaystrength);
+        if (showcategory) gallery.setAttribute("showcategory", showcategory);
+        if (showfilters) gallery.setAttribute("showfilters", showfilters);
+        if (enablemodal) gallery.setAttribute("enablemodal", enablemodal);
+        if (titlesize) gallery.setAttribute("titlesize", titlesize);
+        if (descsize) gallery.setAttribute("descsize", descsize);
+        if (categorysize) gallery.setAttribute("categorysize", categorysize);
+        if (modalimagefit) gallery.setAttribute("modalimagefit", modalimagefit);
+      } catch (e) {
+        console.warn("Could not hydrate widget from Wix props", e);
+      }
     }
 
-    body {
-      font-family: Inter, Arial, sans-serif;
-    }
-
-    pro-filter-gallery {
-      display: block;
-      width: 100%;
-    }
-  </style>
-</head>
-<body>
-  <pro-filter-gallery></pro-filter-gallery>
-
-<script>
-  window.onload = function () {
     if (window.Wix && Wix.addEventListener) {
+      Wix.addEventListener(Wix.Events.SETTINGS_UPDATED, async function () {
+        await hydrateFromWixProps();
+      });
+
       try {
         Wix.reportAppLoaded();
       } catch (e) {}
@@ -46,9 +66,10 @@
       }
 
       reportHeight();
-
       const observer = new ResizeObserver(reportHeight);
       observer.observe(document.body);
+
+      await hydrateFromWixProps();
     }
   };
 </script>
