@@ -1,461 +1,1795 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Settings Panel</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-
+  <title>Pro Filter Gallery – Premium Settings Panel</title>
   <style>
-    * {
-      box-sizing: border-box;
+    :root{
+      --bg:#07090d;
+      --bg-2:#0b0f15;
+      --panel:rgba(255,255,255,.06);
+      --panel-2:rgba(255,255,255,.04);
+      --panel-3:rgba(255,255,255,.08);
+      --stroke:rgba(255,255,255,.1);
+      --stroke-2:rgba(255,255,255,.16);
+      --text:#f4f7fb;
+      --muted:#9ca7b8;
+      --muted-2:#7d8796;
+      --accent:#7c9cff;
+      --accent-2:#9d7cff;
+      --success:#45d483;
+      --danger:#ff5f6d;
+      --warning:#f4be62;
+      --shadow:0 18px 60px rgba(0,0,0,.45);
+      --radius-xl:28px;
+      --radius-lg:22px;
+      --radius-md:16px;
+      --radius-sm:12px;
+      --space-1:8px;
+      --space-2:12px;
+      --space-3:16px;
+      --space-4:20px;
+      --space-5:24px;
+      --space-6:32px;
+      --space-7:40px;
+      --space-8:56px;
+      --sidebar:92px;
     }
 
-    :root {
-      --bg: #0b0d11;
-      --panel: #12151c;
-      --panel-2: #171b23;
-      --border: rgba(255,255,255,0.08);
-      --border-soft: rgba(255,255,255,0.05);
-      --text: #ffffff;
-      --muted: rgba(255,255,255,0.62);
-      --accent: #4d8dff;
-      --radius-lg: 18px;
-      --radius-md: 12px;
-      --radius-sm: 10px;
-    }
-
-    body {
-      margin: 0;
-      font-family: Inter, Arial, sans-serif;
-      padding: 18px;
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0;
+      font-family:Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color:var(--text);
       background:
-        radial-gradient(circle at top left, rgba(77,141,255,0.08), transparent 24%),
-        linear-gradient(180deg, #0a0c10 0%, #0b0d11 100%);
-      color: var(--text);
+        radial-gradient(circle at top left, rgba(124,156,255,.18), transparent 28%),
+        radial-gradient(circle at top right, rgba(157,124,255,.18), transparent 26%),
+        radial-gradient(circle at bottom center, rgba(255,255,255,.06), transparent 36%),
+        linear-gradient(180deg, #090b10 0%, #05070b 100%);
+      overflow:auto;
     }
 
-    .panel-wrap {
-      display: flex;
-      flex-direction: column;
-      gap: 16px;
+   .shell{
+  min-height:100vh;
+  display:grid;
+  grid-template-columns: var(--sidebar) 1fr;
+}
+
+    .sidebar{
+      padding:18px;
+      border-right:1px solid rgba(255,255,255,.08);
+      background:linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,.015));
+      backdrop-filter:blur(24px);
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      gap:16px;
     }
 
-    .panel-header {
-      padding: 4px 2px 2px;
+    .brand{
+      width:56px;height:56px;border-radius:18px;
+      background:
+        linear-gradient(135deg, rgba(124,156,255,.35), rgba(157,124,255,.18)),
+        rgba(255,255,255,.06);
+      border:1px solid rgba(255,255,255,.12);
+      box-shadow:var(--shadow);
+      display:grid;place-items:center;
+      font-weight:700;font-size:18px;letter-spacing:.02em;
+    }
+    
+
+    .nav-rail{
+      display:flex;flex-direction:column;gap:10px;align-items:center;
+      margin-top:8px;
+      width:100%;
     }
 
-    .panel-title {
-      margin: 0 0 6px;
-      font-size: 22px;
-      line-height: 1.02;
-      font-weight: 800;
-      letter-spacing: -0.03em;
+    .rail-btn{
+      width:56px;height:56px;border-radius:18px;
+      border:1px solid transparent;
+      background:transparent;color:var(--muted);
+      cursor:pointer;
+      display:grid;place-items:center;
+      transition:.24s ease;
+      font-size:20px;
     }
 
-    .panel-subtitle {
-      margin: 0;
-      font-size: 13px;
-      line-height: 1.55;
-      color: var(--muted);
+    .rail-btn:hover{
+      background:rgba(255,255,255,.05);
+      color:var(--text);
+      border-color:rgba(255,255,255,.08);
     }
 
-    .section-card {
-      background: linear-gradient(180deg, var(--panel) 0%, var(--panel-2) 100%);
-      border: 1px solid var(--border);
-      border-radius: var(--radius-lg);
-      padding: 16px;
-      box-shadow: 0 10px 30px rgba(0,0,0,0.18);
+    .rail-btn.active{
+      background:linear-gradient(180deg, rgba(255,255,255,.08), rgba(255,255,255,.04));
+      border-color:rgba(255,255,255,.14);
+      color:var(--text);
+      box-shadow:inset 0 1px 0 rgba(255,255,255,.06), 0 10px 24px rgba(0,0,0,.18);
     }
 
-    .section-title {
-      margin: 0 0 14px;
-      font-size: 11px;
-      font-weight: 800;
-      letter-spacing: 0.14em;
-      text-transform: uppercase;
-      color: var(--accent);
+    .sidebar-footer{
+      margin-top:auto;
+      width:100%;
+      display:flex;justify-content:center;
     }
 
-    .field-list {
-      display: flex;
-      flex-direction: column;
-      gap: 14px;
+    .main{
+      min-width:0;
+      display:flex;
+      flex-direction:column;
+      padding:26px;
+      gap:18px;
+      min-height:0;
+      overflow:auto;
     }
 
-    .row {
-      margin: 0;
+    .topbar{
+      min-height:76px;
+      background:linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.04));
+      border:1px solid rgba(255,255,255,.08);
+      border-radius:24px;
+      backdrop-filter:blur(24px);
+      box-shadow:var(--shadow);
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      padding:18px 22px;
+      gap:24px;
     }
 
-    label {
-      display: block;
-      font-size: 12px;
-      font-weight: 700;
-      margin-bottom: 7px;
-      color: rgba(255,255,255,0.92);
+    .title-wrap h1{
+      margin:0;
+      font-size:26px;
+      font-weight:700;
+      letter-spacing:-.03em;
     }
 
-    input,
-    select {
-      width: 100%;
-      border-radius: var(--radius-md);
-      border: 1px solid var(--border-soft);
-      font-size: 14px;
-      font-family: inherit;
-      outline: none;
-      transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+    .title-wrap p{
+      margin:6px 0 0;
+      color:var(--muted);
+      font-size:13px;
     }
 
-    select {
-      padding: 11px 12px;
-      background: rgba(255,255,255,0.04);
-      color: #ffffff;
-      appearance: none;
-      -webkit-appearance: none;
+    .top-actions{
+      display:flex;
+      align-items:center;
+      gap:12px;
+      flex-wrap:wrap;
     }
 
-    select:focus,
-    input[type="range"]:focus,
-    input[type="color"]:focus {
-      border-color: rgba(77,141,255,0.45);
-      box-shadow: 0 0 0 3px rgba(77,141,255,0.12);
+    .btn{
+      appearance:none;border:none;cursor:pointer;
+      border-radius:16px;
+      padding:13px 16px;
+      font-size:13px;font-weight:600;
+      color:var(--text);
+      background:rgba(255,255,255,.06);
+      border:1px solid rgba(255,255,255,.08);
+      transition:.22s ease;
+      display:inline-flex;align-items:center;gap:10px;
+    }
+    .btn:hover{transform:translateY(-1px);background:rgba(255,255,255,.08)}
+    .btn.primary{
+      background:linear-gradient(135deg, rgba(124,156,255,.26), rgba(157,124,255,.24));
+      border-color:rgba(150,160,255,.32);
+    }
+    .btn.ghost{background:transparent}
+    .btn.danger{background:rgba(255,95,109,.12);border-color:rgba(255,95,109,.18)}
+    .btn.small{padding:10px 12px;border-radius:14px;font-size:12px}
+    .btn.icon{width:42px;height:42px;padding:0;justify-content:center}
+
+    .view{
+  display:none;
+  min-height:0;
+  flex:1;
+  overflow:visible;
+}
+
+   .view.active{
+  display:block;
+  overflow:visible;
+  padding-right:2px;
+}
+
+    .hub-grid{
+      height:100%;
+      display:grid;
+      grid-template-columns:1.25fr .95fr;
+      gap:18px;
     }
 
-    input[type="range"] {
-      padding: 0;
-      margin: 0;
-      accent-color: var(--accent);
-      border: none;
-      background: transparent;
-      box-shadow: none;
+    .panel{
+      background:linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.035));
+      border:1px solid rgba(255,255,255,.09);
+      border-radius:28px;
+      backdrop-filter:blur(26px);
+      box-shadow:var(--shadow);
+      position:relative;
+      overflow:hidden;
     }
 
-    input[type="color"] {
-      width: 100%;
-      height: 46px;
-      padding: 0;
-      border-radius: var(--radius-md);
-      background: transparent;
-      cursor: pointer;
-      overflow: hidden;
-      appearance: none;
-      -webkit-appearance: none;
+    .panel::before{
+      content:"";
+      position:absolute; inset:0;
+      background:linear-gradient(180deg, rgba(255,255,255,.04), transparent 24%);
+      pointer-events:none;
     }
 
-    input[type="color"]::-webkit-color-swatch-wrapper {
-      padding: 0;
-      border-radius: var(--radius-md);
+    .hero{
+      padding:32px;
+      display:flex;
+      flex-direction:column;
+      justify-content:space-between;
+      min-height:100%;
     }
 
-    input[type="color"]::-webkit-color-swatch {
-      border: none;
-      border-radius: var(--radius-md);
+    .eyebrow{
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      color:#d9e2f0;
+      padding:8px 12px;
+      border-radius:999px;
+      border:1px solid rgba(255,255,255,.08);
+      background:rgba(255,255,255,.04);
+      font-size:12px;font-weight:600;
+      width:max-content;
     }
 
-    input[type="color"]::-moz-color-swatch {
-      border: none;
-      border-radius: var(--radius-md);
+    .hero h2{
+      margin:18px 0 10px;
+      font-size:44px;
+      line-height:1.02;
+      letter-spacing:-.05em;
+      max-width:620px;
+    }
+    .hero p{
+      margin:0;
+      font-size:15px;
+      line-height:1.6;
+      color:var(--muted);
+      max-width:620px;
     }
 
-    .checkbox-row {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      padding: 10px 12px;
-      border-radius: var(--radius-md);
-      border: 1px solid var(--border-soft);
-      background: rgba(255,255,255,0.03);
+    .hub-actions{
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:16px;
+      margin-top:32px;
     }
 
-    .checkbox-row input[type="checkbox"] {
-      width: 18px;
-      height: 18px;
-      margin: 0;
-      flex: 0 0 auto;
-      accent-color: var(--accent);
+    .action-card{
+      padding:28px 28px 24px;
+      border-radius:24px;
+      border:1px solid rgba(255,255,255,.08);
+      background:linear-gradient(180deg, rgba(255,255,255,.055), rgba(255,255,255,.03));
+      cursor:pointer;
+      transition:.24s ease;
+      min-height:188px;
+      display:flex;
+      flex-direction:column;
+      justify-content:flex-start;
+      align-items:flex-start;
+      text-align:left;
     }
 
-    .checkbox-row label {
-      margin: 0;
-      font-size: 13px;
-      font-weight: 700;
-      color: rgba(255,255,255,0.92);
+    .action-card:hover{
+      transform:translateY(-3px);
+      border-color:rgba(255,255,255,.16);
+      background:linear-gradient(180deg, rgba(255,255,255,.08), rgba(255,255,255,.04));
     }
 
-    .split-2 {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 12px;
+    .action-icon{
+      width:52px;height:52px;border-radius:17px;
+      display:grid;place-items:center;
+      margin-bottom:18px;
+      background:rgba(255,255,255,.045);
+      border:1px solid rgba(255,255,255,.08);
+      color:rgba(244,247,251,.82);
+      box-shadow:inset 0 1px 0 rgba(255,255,255,.03);
+      font-size:20px;
+      flex:0 0 auto;
     }
 
-    .hint {
-      margin-top: 4px;
-      font-size: 11px;
-      line-height: 1.5;
-      color: var(--muted);
+    .action-card h3{
+      margin:0 0 12px;
+      font-size:22px;
+      letter-spacing:-.03em;
+      color:var(--text);
+      align-self:center;
+      text-align:center;
+      width:100%;
+    }
+    .action-card p{
+      margin:0;
+      color:var(--muted);
+      font-size:14px;
+      line-height:1.55;
+      align-self:center;
+      text-align:center;
+      max-width:92%;
+      width:100%;
+    }
+    .action-card span{
+      color:#dfe7f5;
+      font-weight:600;
+      font-size:13px;
+      margin-top:8px;
+      align-self:center;
+      text-align:center;
+      width:100%;
     }
 
-    @media (max-width: 640px) {
-      body {
-        padding: 14px;
-      }
-
-      .section-card {
-        padding: 14px;
-      }
-
-      .panel-title {
-        font-size: 20px;
-      }
-
-      .split-2 {
-        grid-template-columns: 1fr;
-      }
+    .stats{
+      padding:24px;
+      display:grid;
+      grid-template-rows:auto auto 1fr;
+      gap:16px;
     }
+
+    .stats h3{margin:0;font-size:20px;letter-spacing:-.03em}
+    .mini-grid{
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:14px;
+    }
+
+    .mini-card{
+      padding:18px;
+      border-radius:20px;
+      background:rgba(255,255,255,.035);
+      border:1px solid rgba(255,255,255,.08);
+    }
+    .mini-card .label{font-size:12px;color:var(--muted)}
+    .mini-card .value{font-size:30px;font-weight:700;letter-spacing:-.04em;margin-top:8px}
+    .mini-card .sub{font-size:12px;color:var(--muted);margin-top:8px}
+
+    .preview-box{
+      border-radius:24px;
+      border:1px solid rgba(255,255,255,.08);
+      background:linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.02));
+      padding:18px;
+      display:grid;
+      gap:14px;
+    }
+    .snapshot-stats{
+      display:grid;
+      grid-template-columns:repeat(3,1fr);
+      gap:12px;
+    }
+    .snapshot-item{
+      padding:14px;
+      border-radius:18px;
+      background:rgba(255,255,255,.03);
+      border:1px solid rgba(255,255,255,.08);
+    }
+    .snapshot-item .label{font-size:11px;color:var(--muted);margin-bottom:6px}
+    .snapshot-item .value{font-size:16px;font-weight:700;letter-spacing:-.02em}
+    .snapshot-previews{
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:12px;
+    }
+    .snapshot-card{
+      min-height:146px;
+      border-radius:18px;
+      overflow:hidden;
+      border:1px solid rgba(255,255,255,.08);
+      position:relative;
+      background:#0f131a;
+    }
+    .snapshot-card::before{
+  content:"";
+  position:absolute;
+  inset:0;
+  border-radius:inherit;
+  background:linear-gradient(180deg, rgba(0,0,0,0) 30%, rgba(2,4,8,.74) 100%);
+  z-index:1;
+  pointer-events:none;
+}
+    .snapshot-card .thumb{
+  position:absolute;
+  inset:0;
+  border-radius:inherit;
+  background:center/cover no-repeat;
+}
+    .snapshot-card .copy{
+      position:absolute;left:0;right:0;bottom:0;
+      z-index:2;
+      padding:14px;
+    }
+    .snapshot-card strong{display:block;font-size:14px}
+    .snapshot-card small{display:block;margin-top:5px;color:#c8d2df;font-size:12px}
+
+    .preview-head{
+      display:flex;justify-content:space-between;align-items:center;
+      font-size:13px;color:var(--muted);
+    }
+
+    .sample-toolbar{
+      display:flex;gap:8px;flex-wrap:wrap;
+    }
+
+    .chip{
+      padding:8px 12px;border-radius:999px;
+      font-size:12px;
+      background:rgba(255,255,255,.05);
+      border:1px solid rgba(255,255,255,.08);
+      color:#d8e0ec;
+    }
+    .chip.active{
+      background:linear-gradient(135deg, rgba(124,156,255,.24), rgba(157,124,255,.18));
+      border-color:rgba(124,156,255,.3);
+    }
+
+    .sample-cards{
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:12px;
+    }
+
+    .sample-card{
+      min-height:148px;
+      border-radius:18px;
+      overflow:hidden;
+      background:linear-gradient(160deg, rgba(255,255,255,.08), rgba(255,255,255,.03));
+      border:1px solid rgba(255,255,255,.08);
+      position:relative;
+      padding:14px;
+      display:flex;
+      align-items:flex-end;
+    }
+
+    .sample-card::before{
+      content:"";
+      position:absolute;inset:0;
+      background:
+        linear-gradient(180deg, transparent, rgba(0,0,0,.45)),
+        radial-gradient(circle at top left, rgba(124,156,255,.35), transparent 40%);
+      opacity:.95;
+    }
+
+    .sample-card div{
+      position:relative;
+      z-index:1;
+    }
+
+    .sample-card strong{display:block;font-size:14px}
+    .sample-card small{color:#c4cfdd;font-size:12px}
+
+    .design-layout{
+      height:100%;
+      display:grid;
+      grid-template-columns:360px 1fr;
+      gap:18px;
+    }
+
+    .mobile-nav{
+  display:none;
+}
+
+    .design-sidebar, .design-preview, .content-sidebar, .content-main{
+      min-height:0;
+    }
+
+    .design-sidebar .section-stack,
+    .content-sidebar .section-stack{
+      height:100%;
+      overflow:auto;
+      padding:18px;
+      display:flex;flex-direction:column;gap:14px;
+    }
+
+    .design-preview{
+      display:flex;flex-direction:column;gap:18px;
+    }
+
+    .section-card{
+      padding:18px;
+      border-radius:22px;
+      border:1px solid rgba(255,255,255,.08);
+      background:rgba(255,255,255,.035);
+    }
+    .section-card h4{
+      margin:0 0 14px;
+      font-size:15px;
+      letter-spacing:-.02em;
+    }
+
+    .subtle{
+      color:var(--muted);
+      font-size:12px;
+      line-height:1.5;
+    }
+
+    .field-grid{display:grid;gap:12px}
+    .field{display:grid;gap:8px}
+    .field label{
+      font-size:12px;
+      color:#dfe6f1;
+      font-weight:600;
+    }
+    .hint{font-size:11px;color:var(--muted)}
+    input[type="text"], textarea, select, input[type="number"]{
+      width:100%;
+      appearance:none;
+      border:none;
+      outline:none;
+      padding:13px 14px;
+      color:var(--text);
+      background:rgba(255,255,255,.05);
+      border:1px solid rgba(255,255,255,.09);
+      border-radius:14px;
+      font:inherit;
+      resize:vertical;
+    }
+    textarea{min-height:96px}
+    input[type="range"]{
+      width:100%;
+      accent-color:#9fb4ff;
+    }
+    input[type="color"]{
+      width:48px;height:36px;padding:0;border:none;border-radius:12px;background:none;
+    }
+
+    .inline{
+      display:flex;align-items:center;gap:10px;
+    }
+    .inline.grow > *{flex:1}
+    .row-between{
+      display:flex;justify-content:space-between;align-items:center;gap:10px;
+    }
+
+    .switch{
+      position:relative;
+      width:54px;height:32px;
+      flex:0 0 auto;
+    }
+    .switch input{display:none}
+    .slider{
+      position:absolute;inset:0;border-radius:999px;
+      background:rgba(255,255,255,.09);
+      border:1px solid rgba(255,255,255,.08);
+      transition:.22s ease;
+      cursor:pointer;
+    }
+    .slider::before{
+      content:"";
+      position:absolute;top:3px;left:3px;
+      width:24px;height:24px;border-radius:50%;
+      background:#fff;
+      transition:.22s ease;
+      box-shadow:0 6px 20px rgba(0,0,0,.3);
+    }
+    .switch input:checked + .slider{
+      background:linear-gradient(135deg, rgba(124,156,255,.8), rgba(157,124,255,.7));
+    }
+    .switch input:checked + .slider::before{
+      transform:translateX(22px);
+    }
+
+    .design-canvas{
+      flex:1;
+      padding:18px;
+      overflow:auto;
+      display:flex;flex-direction:column;gap:18px;
+      min-height:0;
+    }
+
+    .preview-shell{
+      min-height:100%;
+      padding:22px;
+      border-radius:28px;
+      border:1px solid rgba(255,255,255,.08);
+      background:linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,.02));
+      box-shadow:inset 0 1px 0 rgba(255,255,255,.03), inset 0 0 0 1px rgba(0,0,0,.08);
+      overflow:hidden;
+    }
+
+    .gallery-preview{
+      background:linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.025));
+      border:1px solid rgba(255,255,255,.08);
+      border-radius:24px;
+      padding:20px;
+    }
+
+    .gallery-bar{
+      display:flex;justify-content:space-between;gap:16px;align-items:center;flex-wrap:wrap;
+      margin-bottom:18px;
+    }
+
+    .gallery-title{
+      font-size:20px;font-weight:700;letter-spacing:-.03em;
+    }
+
+    .gallery-filters{display:flex;gap:10px;flex-wrap:wrap}
+    .gallery-grid{
+      display:grid;
+      grid-template-columns:repeat(3,minmax(0,1fr));
+      gap:16px;
+    }
+
+    .gallery-item{
+      position:relative;
+      border-radius:20px;
+      overflow:hidden;
+      min-height:240px;
+      background:#0d1118;
+      border:1px solid rgba(255,255,255,.08);
+    }
+
+    .gallery-thumb{
+      position:absolute;inset:0;
+      background-size:cover;
+      background-position:center;
+      filter:saturate(1.05);
+    }
+
+    .gallery-overlay{
+      position:absolute;inset:0;
+      background:linear-gradient(180deg, transparent 30%, rgba(5,7,11,.88) 100%);
+    }
+
+    .gallery-copy{
+      position:absolute;left:0;right:0;bottom:0;
+      padding:18px;
+      z-index:2;
+    }
+
+    .gallery-copy strong{display:block;font-size:16px;text-shadow:0 2px 12px rgba(0,0,0,.6)}
+    .gallery-copy small{display:block;color:#b9c6d8;margin-top:6px;text-shadow:0 2px 12px rgba(0,0,0,.6)}
+
+    .content-layout{
+      height:100%;
+      display:grid;
+      grid-template-columns:320px 1fr;
+      gap:18px;
+    }
+
+    .content-sidebar{
+      overflow:hidden;
+    }
+
+    .content-main{
+      display:flex;
+      flex-direction:column;
+      gap:18px;
+      min-width:0;
+    }
+
+    .searchbox{
+      display:flex;align-items:center;gap:10px;
+      padding:12px 14px;
+      border-radius:16px;
+      background:rgba(255,255,255,.04);
+      border:1px solid rgba(255,255,255,.08);
+    }
+    .searchbox input{
+      background:transparent;border:none;outline:none;color:var(--text);width:100%;font:inherit
+    }
+
+    .list{
+      display:flex;flex-direction:column;gap:10px;
+      max-height:calc(100vh - 310px);
+      overflow:auto;
+      padding-right:2px;
+    }
+
+    .project-row{
+      width:100%;
+      text-align:left;
+      border:none;
+      cursor:pointer;
+      color:var(--text);
+      border-radius:18px;
+      padding:12px;
+      background:rgba(255,255,255,.035);
+      border:1px solid rgba(255,255,255,.07);
+      display:grid;
+      grid-template-columns:56px 1fr auto;
+      gap:12px;
+      align-items:center;
+      transition:.22s ease;
+    }
+
+    .project-row:hover,.project-row.active{
+      background:rgba(255,255,255,.07);
+      border-color:rgba(255,255,255,.12);
+    }
+
+    .row-thumb{
+      width:56px;height:56px;border-radius:14px;
+      background:#121826 center/cover no-repeat;
+      border:1px solid rgba(255,255,255,.08);
+    }
+
+    .row-copy strong{display:block;font-size:14px;line-height:1.2}
+    .row-copy small{display:block;color:var(--muted);margin-top:6px}
+    .status-dot{
+      width:10px;height:10px;border-radius:50%;
+      background:var(--success);
+      box-shadow:0 0 0 6px rgba(69,212,131,.08);
+    }
+    .status-dot.hidden{background:var(--muted-2);box-shadow:none}
+
+    .editor-wrap{
+      min-width:0;
+      overflow:auto;
+      padding:18px;
+      min-height:0;
+    }
+
+    .editor-grid{
+      display:grid;
+      grid-template-columns:minmax(0,1.08fr) minmax(320px,.72fr);
+      gap:18px;
+      align-items:start;
+    }
+
+    .cover-preview{
+      margin-top:12px;
+      width:100%;
+      height:220px;
+      border-radius:18px;
+      border:1px solid rgba(255,255,255,.08);
+      background:#111722 center/cover no-repeat;
+      overflow:hidden;
+      flex:0 0 auto;
+    }
+
+    .gallery-section{
+      margin-top:18px;
+    }
+
+    .gallery-section .thumb-grid{
+      grid-template-columns:repeat(4,minmax(0,1fr));
+    }
+
+    .gallery-thumb-wrap{
+      margin-top:12px;
+      max-height:290px;
+      overflow:auto;
+      padding-right:4px;
+    }
+
+    .gallery-thumb-wrap::-webkit-scrollbar{
+      width:8px;
+    }
+
+    .gallery-thumb-wrap::-webkit-scrollbar-thumb{
+      background:rgba(255,255,255,.08);
+      border-radius:999px;
+    }
+
+    .editor-grid > div{
+      min-width:0;
+    }
+
+    .editor-grid > div:last-child .section-card{
+      position:sticky;
+      top:0;
+    }
+
+    #editorContent{
+      min-height:0;
+    }
+
+    .upload-zone{
+      border:1px dashed rgba(255,255,255,.15);
+      background:rgba(255,255,255,.03);
+      border-radius:18px;
+      padding:18px;
+      text-align:center;
+      color:var(--muted);
+      display:grid;
+      gap:10px;
+      justify-items:center;
+    }
+    .upload-zone:hover{
+      border-color:rgba(255,255,255,.26);
+      background:rgba(255,255,255,.045);
+      box-shadow:0 0 0 1px rgba(255,255,255,.03), 0 14px 30px rgba(0,0,0,.16);
+    }
+
+    .thumb-grid{
+      display:grid;
+      grid-template-columns:repeat(3,minmax(0,1fr));
+      gap:10px;
+      margin-top:12px;
+    }
+
+    .img-chip{
+      position:relative;
+      aspect-ratio:1/1;
+      border-radius:14px;
+      overflow:hidden;
+      border:1px solid rgba(255,255,255,.08);
+      background:#111722 center/cover no-repeat;
+    }
+
+    .img-chip button{
+      position:absolute;top:8px;right:8px;
+      width:28px;height:28px;border-radius:50%;
+      border:none;cursor:pointer;
+      background:rgba(0,0,0,.55);color:#fff;
+    }
+
+    .table-card{
+      padding:16px;
+      border-radius:22px;
+      border:1px solid rgba(255,255,255,.08);
+      background:rgba(255,255,255,.035);
+      overflow:auto;
+    }
+
+    .table{
+      width:100%;
+      border-collapse:collapse;
+      min-width:700px;
+    }
+    .table th, .table td{
+      padding:14px 12px;
+      border-bottom:1px solid rgba(255,255,255,.08);
+      text-align:left;
+      font-size:13px;
+      vertical-align:middle;
+    }
+    .table th{color:#d9e2ee;font-size:12px}
+    .table td{color:var(--muted)}
+    .table strong{color:var(--text)}
+
+    .empty{
+      display:grid;place-items:center;
+      min-height:320px;
+      text-align:center;
+      color:var(--muted);
+      padding:32px;
+    }
+
+    .badge{
+      display:inline-flex;align-items:center;gap:8px;
+      padding:7px 10px;border-radius:999px;
+      background:rgba(255,255,255,.05);
+      border:1px solid rgba(255,255,255,.08);
+      color:#dbe4f2;font-size:12px;font-weight:600;
+    }
+
+    .toast{
+      position:fixed;
+      right:22px;
+      bottom:22px;
+      padding:14px 16px;
+      border-radius:16px;
+      background:rgba(10,14,22,.92);
+      border:1px solid rgba(255,255,255,.1);
+      color:#f4f7fb;
+      box-shadow:var(--shadow);
+      opacity:0;
+      transform:translateY(10px);
+      pointer-events:none;
+      transition:.24s ease;
+      z-index:1000;
+    }
+
+    .toast.show{
+      opacity:1;
+      transform:translateY(0);
+    }
+
+@media (max-width: 1280px){
+  .shell{
+    grid-template-columns:72px 1fr;
+  }
+
+  .main{
+    padding:20px;
+    gap:16px;
+  }
+
+  .topbar{
+    padding:18px 18px;
+    gap:18px;
+  }
+
+  .hub-grid,
+  .design-layout,
+  .content-layout,
+  .editor-grid{
+    grid-template-columns:1fr;
+  }
+
+  .design-sidebar .section-stack,
+  .content-sidebar .section-stack,
+  .editor-wrap,
+  .design-canvas{
+    overflow:visible;
+  }
+
+  .list{
+    max-height:none;
+  }
+
+  .gallery-grid{
+    grid-template-columns:repeat(3,minmax(0,1fr));
+  }
+}
+
+@media (max-width: 980px){
+  .shell{
+    grid-template-columns:1fr;
+    height:auto;
+    min-height:100vh;
+  }
+
+  .sidebar{
+    display:none;
+  }
+
+  .main{
+    padding:16px;
+    gap:16px;
+    overflow:visible;
+  }
+
+  .topbar{
+    flex-direction:column;
+    align-items:stretch;
+    padding:18px;
+    gap:16px;
+    border-radius:22px;
+  }
+
+  .title-wrap h1{
+    font-size:22px;
+  }
+
+  .title-wrap p{
+    font-size:14px;
+    line-height:1.45;
+    max-width:520px;
+  }
+
+  .top-actions{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:12px;
+    width:100%;
+  }
+
+  .top-actions .btn,
+  .top-actions .badge{
+    width:100%;
+    justify-content:center;
+    min-height:48px;
+  }
+
+  .badge{
+    display:flex;
+  }
+
+  .panel{
+    border-radius:24px;
+  }
+
+  .hero{
+    padding:24px;
+  }
+
+  .hero h2{
+    font-size:34px;
+    max-width:none;
+  }
+
+  .hero p{
+    font-size:14px;
+    max-width:none;
+  }
+
+  .hub-actions{
+    grid-template-columns:1fr;
+    margin-top:24px;
+  }
+
+  .action-card{
+    min-height:auto;
+    padding:22px 22px 20px;
+  }
+
+  .stats{
+    padding:20px;
+  }
+
+  .mini-grid,
+  .snapshot-stats,
+  .snapshot-previews,
+  .sample-cards{
+    grid-template-columns:1fr 1fr;
+  }
+
+  .gallery-preview{
+    padding:16px;
+    border-radius:22px;
+  }
+
+  .gallery-grid{
+    grid-template-columns:repeat(2,minmax(0,1fr));
+    gap:12px;
+  }
+
+  .gallery-grid .gallery-item:nth-child(n+3){
+  display:none;
+}
+
+  .gallery-item{
+    min-height:200px;
+  }
+
+  .section-card{
+    padding:16px;
+    border-radius:18px;
+  }
+
+  .field-grid{
+    gap:10px;
+  }
+
+  .editor-grid{
+    gap:16px;
+  }
+
+  .cover-preview{
+    height:220px;
+  }
+
+  .thumb-grid{
+    grid-template-columns:repeat(3,minmax(0,1fr));
+  }
+
+  .gallery-section .thumb-grid{
+    grid-template-columns:repeat(3,minmax(0,1fr));
+  }
+}
+
+@media (max-width: 640px){
+  body{
+    overflow:auto;
+  }
+
+  .main{
+    padding:12px;
+    gap:14px;
+  }
+
+  .topbar{
+    padding:16px;
+    border-radius:20px;
+  }
+
+  .title-wrap h1{
+    font-size:20px;
+    line-height:1.05;
+  }
+
+  .title-wrap p{
+    font-size:13px;
+    line-height:1.4;
+  }
+
+  .top-actions{
+    grid-template-columns:1fr;
+  }
+
+  .top-actions .btn,
+  .top-actions .badge{
+    min-height:46px;
+    border-radius:14px;
+  }
+
+  .panel{
+    border-radius:20px;
+  }
+
+  .hero{
+    padding:20px;
+  }
+
+  .eyebrow{
+    font-size:11px;
+    padding:7px 10px;
+  }
+
+  .hero h2{
+    font-size:28px;
+    line-height:1.02;
+    margin:14px 0 10px;
+  }
+
+  .hero p{
+    font-size:13px;
+    line-height:1.5;
+  }
+
+  .hub-actions{
+    gap:12px;
+  }
+
+  .action-card{
+    padding:18px 18px 16px;
+    border-radius:18px;
+  }
+
+  .action-icon{
+    width:46px;
+    height:46px;
+    border-radius:14px;
+    margin-bottom:14px;
+    font-size:18px;
+  }
+
+  .action-card h3{
+    font-size:18px;
+    margin-bottom:8px;
+  }
+
+  .action-card p{
+    font-size:13px;
+    line-height:1.5;
+    max-width:100%;
+  }
+
+  .action-card span{
+    font-size:12px;
+  }
+
+  .stats{
+    padding:18px;
+  }
+
+  .mini-grid,
+  .snapshot-stats,
+  .snapshot-previews,
+  .sample-cards{
+    grid-template-columns:1fr;
+  }
+
+  .preview-box{
+    padding:14px;
+    border-radius:18px;
+  }
+
+  .snapshot-card{
+    min-height:132px;
+  }
+
+  .design-canvas{
+    padding:14px;
+    gap:14px;
+  }
+
+  .preview-shell{
+    padding:14px;
+    border-radius:20px;
+  }
+
+  .gallery-preview{
+    padding:16px;
+    border-radius:18px;
+  }
+
+  .gallery-bar{
+    flex-direction:column;
+    align-items:flex-start;
+    gap:12px;
+    margin-bottom:14px;
+  }
+
+  .gallery-title{
+    font-size:17px;
+  }
+
+  .gallery-filters{
+    gap:8px;
+  }
+
+  .chip{
+    padding:7px 10px;
+    font-size:11px;
+  }
+
+  .gallery-grid{
+    grid-template-columns:1fr;
+    gap:12px;
+  }
+
+  .gallery-item{
+    min-height:240px;
+    border-radius:16px;
+  }
+
+  .gallery-copy{
+    padding:14px;
+  }
+
+  .gallery-copy strong{
+    font-size:16px;
+  }
+
+  .gallery-copy small{
+    font-size:12px;
+  }
+
+  .section-card{
+    padding:14px;
+    border-radius:16px;
+  }
+
+  .section-card h4{
+    font-size:14px;
+    margin-bottom:12px;
+  }
+
+  .field label{
+    font-size:11px;
+  }
+
+  .hint{
+    font-size:10px;
+    line-height:1.4;
+  }
+
+  input[type="text"],
+  textarea,
+  select,
+  input[type="number"]{
+    padding:12px 12px;
+    border-radius:12px;
+    font-size:14px;
+  }
+
+  .searchbox{
+    padding:11px 12px;
+    border-radius:14px;
+  }
+
+  .project-row{
+    grid-template-columns:48px 1fr auto;
+    gap:10px;
+    padding:10px;
+    border-radius:16px;
+  }
+
+  .row-thumb{
+    width:48px;
+    height:48px;
+    border-radius:12px;
+  }
+
+  .row-copy strong{
+    font-size:13px;
+  }
+
+  .row-copy small{
+    font-size:11px;
+    margin-top:4px;
+  }
+
+  .editor-wrap{
+    padding:14px;
+  }
+
+  .cover-preview{
+    height:180px;
+    border-radius:16px;
+  }
+
+  .thumb-grid,
+  .gallery-section .thumb-grid{
+    grid-template-columns:repeat(2,minmax(0,1fr));
+  }
+
+  .upload-zone{
+    padding:14px;
+    border-radius:14px;
+  }
+
+  .btn{
+    padding:12px 14px;
+    border-radius:14px;
+    font-size:13px;
+  }
+
+  .btn.small{
+    padding:10px 12px;
+    border-radius:12px;
+    font-size:12px;
+  }
+
+  .mobile-nav{
+  display:grid;
+  grid-template-columns:1fr 1fr 1fr;
+  gap:8px;
+  position:sticky;
+  top:12px;
+  z-index:30;
+}
+
+.mobile-nav-btn{
+  appearance:none;
+  border:none;
+  cursor:pointer;
+  min-height:42px;
+  border-radius:14px;
+  padding:10px 12px;
+  font-size:12px;
+  font-weight:700;
+  color:var(--text);
+  background:rgba(255,255,255,.05);
+  border:1px solid rgba(255,255,255,.08);
+}
+
+.mobile-nav-btn.active{
+  background:linear-gradient(135deg, rgba(124,156,255,.22), rgba(157,124,255,.18));
+  border-color:rgba(150,160,255,.28);
+}
+
+.design-preview{
+  min-height:auto;
+}
+
+.design-canvas{
+  overflow:visible;
+}
+
+.preview-shell{
+  min-height:auto;
+  padding:12px;
+}
+
+.gallery-preview{
+  padding:12px;
+}
+
+.gallery-bar{
+  gap:10px;
+  margin-bottom:12px;
+}
+
+.gallery-filters{
+  gap:6px;
+}
+
+.gallery-grid{
+  grid-template-columns:1fr;
+  gap:10px;
+}
+
+.gallery-item{
+  min-height:260px;
+  width:100%;
+}
+
+.gallery-grid .gallery-item:nth-child(n+2){
+  display:none;
+}
+
+}
+
   </style>
 </head>
-
 <body>
-  <div class="panel-wrap">
+  <div class="shell">
+    <aside class="sidebar">
+      <div class="brand">PF</div>
+      <div class="nav-rail">
+        <button class="rail-btn active" data-view-target="hub" title="Hub">⌂</button>
+        <button class="rail-btn" data-view-target="design" title="Design">✦</button>
+        <button class="rail-btn" data-view-target="content" title="Content">▣</button>
+      </div>
+      <div class="sidebar-footer">
+        <button class="rail-btn" id="saveSettingsBtn" title="Save">↥</button>
+      </div>
+    </aside>
 
-    <div class="panel-header">
-      <h1 class="panel-title">Gallery Settings</h1>
-      <p class="panel-subtitle">
-        Refine the look and feel of your portfolio gallery to better match your site.
-      </p>
+    <main class="main">
+      <header class="topbar">
+        <div class="title-wrap">
+          <h1>Pro Filter Gallery</h1>
+          <p>Premium settings experience for a sellable Wix marketplace app.</p>
+        </div>
+        <div class="top-actions">
+          <span class="badge" id="projectCountBadge">0 Projects</span>
+          <button class="btn ghost" id="exportTemplateBtn">Export CSV Template</button>
+          <button class="btn" id="importCsvBtn">Import CSV</button>
+          <button class="btn primary" id="newProjectBtn">New Project</button>
+          <input type="file" id="csvFileInput" accept=".csv,text/csv" hidden />
+        </div>
+      </header>
+
+      <div class="mobile-nav">
+  <button class="mobile-nav-btn active" data-view-target="hub">Home</button>
+  <button class="mobile-nav-btn" data-view-target="design">Design</button>
+  <button class="mobile-nav-btn" data-view-target="content">Content</button>
+</div>
+
+      <section class="view active" id="view-hub">
+        <div class="hub-grid">
+          <div class="panel hero">
+            <div>
+              <span class="eyebrow">Gallery Control</span>
+              <h2>Design and manage your gallery in one place.</h2>
+              <p>
+                Adjust layout, refine the look, and organise your projects with a clean, visual workflow.
+              </p>
+
+              <div class="hub-actions">
+                <button class="action-card" data-go="design">
+                  <div class="action-icon">✦</div>
+                  <div>
+                    <h3>Edit Design</h3>
+                    <p>Control layout, card styling, spacing, typography, filters, and modal behaviour with clean visual inputs.</p>
+                  </div>
+                  <span>Open design controls →</span>
+                </button>
+
+                <button class="action-card" data-go="content">
+                  <div class="action-icon">▣</div>
+                  <div>
+                    <h3>Manage Content</h3>
+                    <p>Add projects, upload cover and gallery images, reorder items, hide entries, and bulk import with CSV.</p>
+                  </div>
+                  <span>Open content manager →</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div class="panel stats">
+            <div class="row-between">
+              <h3>System Overview</h3>
+              <span class="badge" id="saveStateBadge">Editing</span>
+            </div>
+
+            <div class="mini-grid">
+              <div class="mini-card">
+                <div class="label">Projects</div>
+                <div class="value" id="statProjects">0</div>
+                <div class="sub">Total portfolio entries</div>
+              </div>
+              <div class="mini-card">
+                <div class="label">Visible</div>
+                <div class="value" id="statVisible">0</div>
+                <div class="sub">Shown in widget</div>
+              </div>
+            </div>
+
+            <div class="preview-box">
+              <div class="preview-head">
+                <span>Content Snapshot</span>
+                <span>Overview</span>
+              </div>
+
+              <div class="snapshot-stats">
+                <div class="snapshot-item">
+                  <div class="label">Last edited</div>
+                  <div class="value" id="snapshotLastEdited">—</div>
+                </div>
+                <div class="snapshot-item">
+                  <div class="label">Categories</div>
+                  <div class="value" id="snapshotCategoryCount">0</div>
+                </div>
+                <div class="snapshot-item">
+                  <div class="label">Hidden projects</div>
+                  <div class="value" id="snapshotHiddenCount">0</div>
+                </div>
+              </div>
+
+              <div class="snapshot-previews" id="snapshotPreviews"></div>
+
+              <p class="subtle">A quick view of your content structure and the projects currently shaping the gallery.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="view" id="view-design">
+        <div class="design-layout">
+          <div class="panel design-sidebar">
+            <div class="section-stack">
+              <div class="section-card">
+                <h4>Layout</h4>
+                <div class="field-grid">
+                  <div class="field">
+                    <label for="layoutColumns">Columns</label>
+                    <input type="range" min="2" max="5" step="1" id="layoutColumns" />
+                    <div class="hint"><span id="layoutColumnsValue"></span> columns in desktop preview.</div>
+                  </div>
+                  <div class="field">
+                    <label for="cardGap">Card Gap</label>
+                    <input type="range" min="8" max="36" step="1" id="cardGap" />
+                    <div class="hint"><span id="cardGapValue"></span> px spacing between cards.</div>
+                  </div>
+                  <div class="field">
+                    <label for="cardRadius">Card Radius</label>
+                    <input type="range" min="8" max="32" step="1" id="cardRadius" />
+                    <div class="hint"><span id="cardRadiusValue"></span> px border radius.</div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="section-card">
+  <h4>Cards</h4>
+  <div class="field-grid">
+    <div class="field inline grow">
+      <div>
+        <label for="cardBackground">Card Background</label>
+        <div class="hint">Main card surface</div>
+      </div>
+      <input type="color" id="cardBackground" />
     </div>
 
-    <section class="section-card">
-      <h2 class="section-title">Style</h2>
-      <div class="field-list">
-        <div class="row">
-          <label for="accent">Accent Color</label>
-          <input type="color" id="accent" />
-        </div>
+    <div class="field">
+      <label for="textPanelStyle">Text Background Style</label>
+      <select id="textPanelStyle">
+        <option value="fade">Fade</option>
+        <option value="solid">Solid</option>
+      </select>
+      <div class="hint">Choose between a soft gradient fade or a solid text panel.</div>
+    </div>
 
-        <div class="row">
-          <label for="background">Background Color</label>
-          <input type="color" id="background" />
-        </div>
-
-        <div class="row">
-          <label for="backgroundOpacity">Background Opacity</label>
-          <input type="range" id="backgroundOpacity" min="0" max="1" step="0.01" />
-        </div>
-
-        <div class="row checkbox-row">
-          <input type="checkbox" id="showBackground" />
-          <label for="showBackground">Show Background</label>
-        </div>
-
-        <div class="row">
-          <label for="fontFamily">Font Family</label>
-          <select id="fontFamily">
-            <option value="Inter">Inter</option>
-            <option value="Arial">Arial</option>
-            <option value="Helvetica">Helvetica</option>
-            <option value="Georgia">Georgia</option>
-            <option value="Poppins">Poppins</option>
-            <option value="Montserrat">Montserrat</option>
-          </select>
-        </div>
+    <div class="field inline grow">
+      <div>
+        <label for="overlayStrength">Background Strength</label>
+        <div class="hint"><span id="overlayStrengthValue"></span>%</div>
       </div>
-    </section>
+      <input type="range" min="20" max="100" step="1" id="overlayStrength" />
+    </div>
 
-    <section class="section-card">
-      <h2 class="section-title">Typography</h2>
-      <div class="field-list">
-        <div class="split-2">
-          <div class="row">
-            <label for="titleSize">Title Size</label>
-            <select id="titleSize">
-              <option value="small">Small</option>
-              <option value="medium" selected>Medium</option>
-              <option value="large">Large</option>
-            </select>
-          </div>
-
-          <div class="row">
-            <label for="descSize">Description Size</label>
-            <select id="descSize">
-              <option value="small">Small</option>
-              <option value="medium" selected>Medium</option>
-              <option value="large">Large</option>
-            </select>
-          </div>
-        </div>
-
-        <div class="row">
-          <label for="categorySize">Category Size</label>
-          <select id="categorySize">
-            <option value="small">Small</option>
-            <option value="medium" selected>Medium</option>
-          </select>
-        </div>
+    <div class="row-between">
+      <div>
+        <label>Show category label</label>
+        <div class="hint">Display small category text on cards</div>
       </div>
-    </section>
+      <label class="switch">
+        <input type="checkbox" id="showCategory" />
+        <span class="slider"></span>
+      </label>
+    </div>
+  </div>
+</div>
 
-    <section class="section-card">
-      <h2 class="section-title">Pills</h2>
-      <div class="field-list">
-        <div class="split-2">
-          <div class="row">
-            <label for="pillActiveBg">Selected Pill Background</label>
-            <input type="color" id="pillActiveBg" />
-          </div>
+              <div class="section-card">
+                <h4>Typography</h4>
+                <div class="field-grid">
+                  <div class="field">
+                    <label for="titleSize">Title Size</label>
+                    <input type="range" min="14" max="28" step="1" id="titleSize" />
+                    <div class="hint"><span id="titleSizeValue"></span> px</div>
+                  </div>
+                  <div class="field">
+                    <label for="metaSize">Meta Size</label>
+                    <input type="range" min="10" max="18" step="1" id="metaSize" />
+                    <div class="hint"><span id="metaSizeValue"></span> px</div>
+                  </div>
+                </div>
+              </div>
 
-          <div class="row">
-            <label for="pillActiveText">Selected Pill Text</label>
-            <input type="color" id="pillActiveText" />
-          </div>
-        </div>
+              <div class="section-card">
+                <h4>Filters</h4>
+                <div class="field-grid">
+                  <div class="row-between">
+                    <div>
+                      <label>Show filters</label>
+                      <div class="hint">Enable category chip bar</div>
+                    </div>
+                    <label class="switch">
+                      <input type="checkbox" id="showFilters" />
+                      <span class="slider"></span>
+                    </label>
+                  </div>
 
-        <div class="split-2">
-          <div class="row">
-            <label for="pillBg">Unselected Pill Background</label>
-            <input type="color" id="pillBg" />
-          </div>
+                  <div class="field inline grow">
+                    <div>
+                      <label for="accentColor">Accent Color</label>
+                      <div class="hint">Used for active states</div>
+                    </div>
+                    <input type="color" id="accentColor" />
+                  </div>
+                </div>
+              </div>
 
-          <div class="row">
-            <label for="pillText">Unselected Pill Text</label>
-            <input type="color" id="pillText" />
-          </div>
-        </div>
-
-        <div class="row">
-          <label for="pillBorder">Unselected Pill Border</label>
-          <input type="color" id="pillBorder" />
-        </div>
+              <div class="section-card">
+  <h4>Modal</h4>
+  <div class="field-grid">
+    <div class="row-between">
+      <div>
+        <label>Enable modal</label>
+        <div class="hint">Open project details on card click</div>
       </div>
-    </section>
+      <label class="switch">
+        <input type="checkbox" id="enableModal" />
+        <span class="slider"></span>
+      </label>
+    </div>
 
-    <section class="section-card">
-      <h2 class="section-title">Card</h2>
-      <div class="field-list">
-        <div class="row">
-          <label for="cardPanelBg">Card Panel Background</label>
-          <input type="color" id="cardPanelBg" />
-        </div>
+    <div class="field">
+      <label for="modalImageFit">Modal Image Fit</label>
+      <select id="modalImageFit">
+        <option value="cover">Cover (cropped)</option>
+        <option value="contain">Contain (full image)</option>
+      </select>
+      <div class="hint">Choose whether modal images fill the frame or show fully without cropping.</div>
+    </div>
 
-        <div class="split-2">
-          <div class="row">
-            <label for="titleColor">Title Color</label>
-            <input type="color" id="titleColor" />
-          </div>
-
-          <div class="row">
-            <label for="descColor">Description Color</label>
-            <input type="color" id="descColor" />
-          </div>
-        </div>
-
-        <div class="row">
-          <label for="categoryColor">Category Color</label>
-          <input type="color" id="categoryColor" />
-        </div>
-
-        <div class="split-2">
-          <div class="row">
-            <label for="radius">Card Radius</label>
-            <input type="range" id="radius" min="0" max="40" step="1" />
-          </div>
-
-          <div class="row">
-            <label for="imageRadius">Image Radius</label>
-            <input type="range" id="imageRadius" min="0" max="40" step="1" />
-          </div>
-        </div>
+    <div class="row-between">
+      <div>
+        <label>Show gallery count</label>
+        <div class="hint">Small count badge in preview</div>
       </div>
-    </section>
-
-    <section class="section-card">
-      <h2 class="section-title">Modal</h2>
-      <div class="field-list">
-        <div class="row">
-          <label for="modalBg">Modal Background</label>
-          <input type="color" id="modalBg" />
-        </div>
-
-        <div class="split-2">
-          <div class="row">
-            <label for="modalTitleColor">Modal Title Color</label>
-            <input type="color" id="modalTitleColor" />
+      <label class="switch">
+        <input type="checkbox" id="showGalleryCount" />
+        <span class="slider"></span>
+      </label>
+    </div>
+  </div>
+</div>
+            </div>
           </div>
 
-          <div class="row">
-            <label for="modalDescColor">Modal Description Color</label>
-            <input type="color" id="modalDescColor" />
+          <div class="design-preview">
+            <div class="panel design-canvas">
+              <div class="preview-shell">
+                <div class="gallery-preview" id="galleryPreview">
+                  <div class="gallery-bar">
+                    <div class="gallery-title">Selected Work</div>
+                    <div class="gallery-filters" id="previewFilters"></div>
+                  </div>
+                  <div class="gallery-grid" id="previewGrid"></div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
-      </div>
-    </section>
+      </section>
 
-    <section class="section-card">
-      <h2 class="section-title">Layout</h2>
-      <div class="field-list">
-        <div class="split-2">
-          <div class="row">
-            <label for="columns">Desktop Columns</label>
-            <input type="range" id="columns" min="2" max="6" step="1" />
+      <section class="view" id="view-content">
+        <div class="content-layout">
+          <div class="panel content-sidebar">
+            <div class="section-stack">
+              <div class="row-between">
+                <h4 style="margin:0;font-size:18px">Projects</h4>
+                <button class="btn small primary" id="sidebarNewProjectBtn">Add</button>
+              </div>
+
+              <div class="searchbox">
+                <span>⌕</span>
+                <input type="text" id="projectSearch" placeholder="Search projects..." />
+              </div>
+
+              <div class="inline grow">
+                <button class="btn small" id="moveUpBtn">Move Up</button>
+                <button class="btn small" id="moveDownBtn">Move Down</button>
+              </div>
+
+              <div class="list" id="projectList"></div>
+            </div>
           </div>
 
-          <div class="row">
-            <label for="gap">Card Gap</label>
-            <input type="range" id="gap" min="8" max="40" step="1" />
-          </div>
-        </div>
+          
+<div class="content-main">
+            <div class="panel editor-wrap">
+              <div id="editorEmpty" class="empty">
+                <div>
+                  <h3 style="margin:0 0 8px">No project selected</h3>
+                  <p style="margin:0">Select a project from the left to update its content, imagery, visibility, and order.</p>
+                </div>
+              </div>
 
-        <div class="row">
-          <label for="cardWidth">Mobile Card Width</label>
-          <input type="range" id="cardWidth" min="180" max="340" step="1" />
-        </div>
+              <div id="editorContent" class="editor-scroll" style="display:none">
+                <div class="row-between" style="margin-bottom:18px">
+                  <div>
+                    <h3 style="margin:0;font-size:22px;letter-spacing:-.03em">Project Editor</h3>
+                    <p class="subtle" style="margin:6px 0 0">Everything lives inside the app.</p>
+                  </div>
+                  <div class="inline">
+                    <button class="btn small" id="duplicateProjectBtn">Duplicate</button>
+                    <button class="btn small danger" id="deleteProjectBtn">Delete</button>
+                  </div>
+                </div>
 
-        <div class="split-2">
-          <div class="row">
-            <label for="textAlign">Text Alignment</label>
-            <select id="textAlign">
-              <option value="left" selected>Left</option>
-              <option value="center">Center</option>
-            </select>
-          </div>
-
-          <div class="row">
-            <label for="imageFit">Image Fit</label>
-            <select id="imageFit">
-              <option value="cover" selected>Cover</option>
-              <option value="contain">Contain</option>
-            </select>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <section class="section-card">
-      <h2 class="section-title">Visibility & Effects</h2>
-      <div class="field-list">
-        <div class="row checkbox-row">
-          <input type="checkbox" id="showDescription" />
-          <label for="showDescription">Show Description</label>
-        </div>
-
-        <div class="row checkbox-row">
-          <input type="checkbox" id="showCategory" />
-          <label for="showCategory">Show Category</label>
-        </div>
-
-        <div class="row checkbox-row">
-          <input type="checkbox" id="showShadow" />
-          <label for="showShadow">Show Shadow</label>
-        </div>
-
-        <div class="row checkbox-row">
-          <input type="checkbox" id="hoverEffect" />
-          <label for="hoverEffect">Hover Effect</label>
-        </div>
-      </div>
-    </section>
-
+                
+<div class="editor-grid">
+                  <div>
+                    <div class="section-card">
+                      <div class="field-grid">
+  <div class="field">
+    <label for="projectTitle">Title</label>
+    <input type="text" id="projectTitle" placeholder="e.g. Studio Identity" />
   </div>
 
-  <script type="module" src="./settings-panel.js"></script>
+  <div class="field">
+    <label for="projectCategory">Category</label>
+    <input type="text" id="projectCategory" placeholder="e.g. Branding" />
+  </div>
+
+  <div class="field">
+    <label for="projectModalImageFit">Modal Image Fit</label>
+    <select id="projectModalImageFit">
+      <option value="">Use global setting</option>
+      <option value="cover">Cover (cropped)</option>
+      <option value="contain">Contain (full image)</option>
+    </select>
+    <div class="hint">Override the default modal image fit for this project only.</div>
+  </div>
+
+  <div class="field">
+    <label for="projectDescription">Description</label>
+    <textarea id="projectDescription" placeholder="Tell the story behind this project."></textarea>
+  </div>
+
+  <div class="row-between">
+    <div>
+      <label>Visible in widget</label>
+      <div class="hint">Hide projects without deleting them</div>
+    </div>
+    <label class="switch">
+      <input type="checkbox" id="projectVisible" />
+      <span class="slider"></span>
+    </label>
+  </div>
+</div>
+                    </div>
+
+                    <div class="section-card gallery-section">
+                      <div class="row-between">
+                        <h4 style="margin:0">Gallery Images</h4>
+                        <div class="inline">
+                          <input type="file" id="galleryImageUpload" accept="image/*" multiple hidden />
+                          <button class="btn small" id="galleryUploadBtn">Upload Images</button>
+                        </div>
+                      </div>
+                      <div class="field" style="margin-top:12px">
+                        <label for="galleryUrlInput">Add image by URL</label>
+                        <div class="inline">
+                          <input type="text" id="galleryUrlInput" placeholder="https://..." />
+                          <button class="btn small" id="addGalleryUrlBtn">Add</button>
+                        </div>
+                      </div>
+                      <div class="gallery-thumb-wrap">
+                        <div class="thumb-grid" id="galleryThumbs"></div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <div class="section-card">
+                      <h4>Cover Image</h4>
+                      <div class="upload-zone">
+                        <div>Upload cover image or paste a URL</div>
+                        <div class="inline">
+                          <input type="file" id="coverImageUpload" accept="image/*" hidden />
+                          <button class="btn small" id="coverUploadBtn">Upload</button>
+                        </div>
+                      </div>
+                      <div class="field" style="margin-top:12px">
+                        <label for="coverImageUrl">Cover image URL</label>
+                        <input type="text" id="coverImageUrl" placeholder="https://..." />
+                      </div>
+                      <div id="coverPreview" class="cover-preview"></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+<script src="settings-panel.js"></script>
 </body>
 </html>
