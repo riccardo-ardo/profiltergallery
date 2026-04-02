@@ -58,7 +58,6 @@ class ProFilterGallery extends HTMLElement {
     };
 
     this.projects = [];
-
     this.filters = ["All"];
 
     this.activeFilter = "All";
@@ -67,13 +66,11 @@ class ProFilterGallery extends HTMLElement {
     this._resizeObserver = null;
     this._sendHeight = null;
     this._eventsBound = false;
-    this._messageHandlerBound = false;
-    this._wixDataBound = false;
+    this._wixSettingsBound = false;
   }
 
   static get observedAttributes() {
     return [
-      "instance",
       "projects",
       "accent",
       "background",
@@ -86,6 +83,8 @@ class ProFilterGallery extends HTMLElement {
       "imageradius",
       "showdescription",
       "showcategory",
+      "showfilters",
+      "enablemodal",
       "textalign",
       "showshadow",
       "hovereffect",
@@ -100,24 +99,19 @@ class ProFilterGallery extends HTMLElement {
       "pillborder",
       "pilltext",
       "cardpanelbg",
-"textpanelstyle",
-"overlaystrength",
-"titlecolor",
-"desccolor",
-"categorycolor",
-"modalbg",
-"modalimagefit",
-"modaltitlecolor",
-"modaldesccolor"
+      "textpanelstyle",
+      "overlaystrength",
+      "titlecolor",
+      "desccolor",
+      "categorycolor",
+      "modalbg",
+      "modalimagefit",
+      "modaltitlecolor",
+      "modaldesccolor"
     ];
   }
 
   attributeChangedCallback(name, oldValue, newValue) {
-    if (name === "instance" && newValue && newValue !== oldValue) {
-      this.loadCMSData();
-      return;
-    }
-
     if (oldValue === newValue) return;
 
     switch (name.toLowerCase()) {
@@ -132,6 +126,8 @@ class ProFilterGallery extends HTMLElement {
 
       case "accent":
         this.config.accent = newValue || "#4d8dff";
+        this.config.pillActiveBg = this.config.accent;
+        this.config.categoryColor = this.config.accent;
         break;
 
       case "background":
@@ -160,6 +156,7 @@ class ProFilterGallery extends HTMLElement {
 
       case "radius":
         this.config.radius = this.parsePxValue(newValue, 22);
+        this.config.imageRadius = this.config.radius;
         break;
 
       case "imageradius":
@@ -172,6 +169,14 @@ class ProFilterGallery extends HTMLElement {
 
       case "showcategory":
         this.config.showCategory = this.parseBoolean(newValue, true);
+        break;
+
+      case "showfilters":
+        this.config.showFilters = this.parseBoolean(newValue, true);
+        break;
+
+      case "enablemodal":
+        this.config.enableModal = this.parseBoolean(newValue, true);
         break;
 
       case "textalign":
@@ -284,8 +289,8 @@ class ProFilterGallery extends HTMLElement {
     this.applyInitialAttributes();
     this.render();
     this.bindEvents();
-    this.bindMessageBridge();
-    this.bindWixData();
+    this.bindWixSettingsListener();
+    this.loadPropsFromWix();
     this.renderCards();
     this.setupAutoHeight();
   }
@@ -294,115 +299,59 @@ class ProFilterGallery extends HTMLElement {
     if (this._resizeObserver) this._resizeObserver.disconnect();
   }
 
-  applySettings(payload = {}) {
-   if (payload.design) {
-  const design = payload.design;
+  async loadPropsFromWix() {
+    if (!window.Wix || typeof Wix.getProp !== "function") return;
 
-  if (design.accentColor) {
-    this.config.accent = design.accentColor;
-    this.config.pillActiveBg = design.accentColor;
-    this.config.categoryColor = design.accentColor;
-  }
+    try {
+      const props = [
+        "projects",
+        "accent",
+        "columns",
+        "gap",
+        "radius",
+        "cardpanelbg",
+        "textpanelstyle",
+        "overlaystrength",
+        "showcategory",
+        "showfilters",
+        "enablemodal",
+        "titlesize",
+        "descsize",
+        "categorysize",
+        "modalimagefit"
+      ];
 
-  if (typeof design.columns !== "undefined") {
-    this.config.columns = Math.max(1, Number(design.columns) || this.config.columns);
-  }
+      for (const key of props) {
+        const value = await Wix.getProp(key);
+        if (value === null || value === undefined || value === "") continue;
 
-  if (typeof design.cardGap !== "undefined") {
-    this.config.gap = Number(design.cardGap) || this.config.gap;
-  }
+        if (key === "projects") {
+          try {
+            this.setProjects(JSON.parse(value));
+          } catch (e) {
+            console.warn("Invalid project JSON from Wix", e);
+          }
+        } else {
+          this.setAttribute(key, value);
+        }
+      }
 
-  if (typeof design.cardRadius !== "undefined") {
-    this.config.radius = Number(design.cardRadius) || this.config.radius;
-    this.config.imageRadius = this.config.radius;
-  }
-
-if (typeof design.cardBackground !== "undefined") {
-  this.config.cardPanelBg = design.cardBackground || this.config.cardPanelBg;
-}
-
-if (typeof design.textPanelStyle !== "undefined") {
-  this.config.textPanelStyle = design.textPanelStyle || "fade";
-}
-
-if (typeof design.overlayStrength !== "undefined") {
-  this.config.overlayStrength = Number(design.overlayStrength) || 72;
-}
-
-  if (typeof design.showCategory !== "undefined") {
-    this.config.showCategory = !!design.showCategory;
-  }
-
-  if (typeof design.showFilters !== "undefined") {
-    this.config.showFilters = !!design.showFilters;
-  }
-
-  if (typeof design.enableModal !== "undefined") {
-    this.config.enableModal = !!design.enableModal;
-  }
-
-  if (typeof design.modalImageFit !== "undefined") {
-  this.config.modalImageFit = design.modalImageFit || "cover";
-}
-
-  if (typeof design.titleSize !== "undefined") {
-    this.config.titleSize = this.mapSizeToPreset(Number(design.titleSize));
-  }
-
-  if (typeof design.metaSize !== "undefined") {
-    this.config.descSize = this.mapSizeToPreset(Number(design.metaSize));
-    this.config.categorySize = Number(design.metaSize) <= 10 ? "small" : "medium";
-  }
-}
-
-    if (Array.isArray(payload.projects)) {
-      this.setProjects(payload.projects);
-      return;
+      this.render();
+      this.renderCards();
+      if (this._sendHeight) this._sendHeight();
+    } catch (e) {
+      console.warn("Wix prop load error", e);
     }
-
-    this.render();
-    this.renderCards();
   }
 
-  bindWixData() {
-    if (this._wixDataBound) return;
-    this._wixDataBound = true;
+  bindWixSettingsListener() {
+    if (this._wixSettingsBound) return;
+    this._wixSettingsBound = true;
 
-    window.addEventListener("message", (event) => {
-      if (event?.data?.type === "WIX_DATA" && Array.isArray(event.data.items)) {
-        const projects = event.data.items.map((item, index) => ({
-          id: item._id || `project-${index + 1}`,
-          title: item.title || "Untitled Project",
-          category: item.category || "Uncategorized",
-          description: item.description || "",
-          coverImage: this.normalizeImage(item.coverImage),
-          images: Array.isArray(item.images)
-            ? item.images.map((img) => this.normalizeImage(img)).filter(Boolean)
-            : item.images
-              ? [this.normalizeImage(item.images)].filter(Boolean)
-              : [],
-          order: item.order || index + 1,
-          visible: item.visible !== false
-        }));
+    if (!window.Wix || !Wix.addEventListener) return;
 
-        this.setProjects(projects);
-      }
-    });
-  }
-
-  bindMessageBridge() {
-    if (this._messageHandlerBound) return;
-    this._messageHandlerBound = true;
-
-    window.addEventListener("message", (event) => {
-      if (event?.data?.type === "WIX_PORTFOLIO_DATA" && Array.isArray(event.data.projects)) {
-        this.setProjects(event.data.projects);
-        return;
-      }
-
-      if (event?.data?.type === "PRO_FILTER_GALLERY_SETTINGS_UPDATED" && event.data.payload) {
-        this.applySettings(event.data.payload);
-      }
+    Wix.addEventListener(Wix.Events.SETTINGS_UPDATED, async () => {
+      await this.loadPropsFromWix();
     });
   }
 
@@ -439,10 +388,10 @@ if (typeof design.overlayStrength !== "undefined") {
   }
 
   mapSizeToPreset(value) {
-  if (value <= 15) return "small";
-  if (value >= 18) return "large";
-  return "medium";
-}
+    if (value <= 15) return "small";
+    if (value >= 18) return "large";
+    return "medium";
+  }
 
   normalizeFontFamily(value) {
     const v = (value || "").trim();
@@ -496,16 +445,16 @@ if (typeof design.overlayStrength !== "undefined") {
         }
 
         return {
-  id: project.id ?? `project-${index + 1}`,
-  title: project.title || "Untitled Project",
-  category: project.category || "Uncategorized",
-  description: project.description || "",
-  coverImage,
-  images,
-  modalImageFit: project.modalImageFit || "",
-  order: typeof project.order === "number" ? project.order : index + 1,
-  visible: project.visible !== false
-};
+          id: project.id ?? `project-${index + 1}`,
+          title: project.title || "Untitled Project",
+          category: project.category || "Uncategorized",
+          description: project.description || "",
+          coverImage,
+          images,
+          modalImageFit: project.modalImageFit || "",
+          order: typeof project.order === "number" ? project.order : index + 1,
+          visible: project.visible !== false
+        };
       });
     }
 
@@ -567,48 +516,48 @@ if (typeof design.overlayStrength !== "undefined") {
   }
 
   getTitleSizePx() {
-  switch (this.config.titleSize) {
-    case "small":
-      return 13;
-    case "large":
-      return 22;
-    default:
-      return 17;
+    switch (this.config.titleSize) {
+      case "small":
+        return 13;
+      case "large":
+        return 22;
+      default:
+        return 17;
+    }
   }
-}
 
   getMobileTitleSizePx() {
-  switch (this.config.titleSize) {
-    case "small":
-      return 13;
-    case "large":
-      return 20;
-    default:
-      return 16;
+    switch (this.config.titleSize) {
+      case "small":
+        return 13;
+      case "large":
+        return 20;
+      default:
+        return 16;
+    }
   }
-}
 
   getDescSizePx() {
-  switch (this.config.descSize) {
-    case "small":
-      return 11;
-    case "large":
-      return 15;
-    default:
-      return 13;
+    switch (this.config.descSize) {
+      case "small":
+        return 11;
+      case "large":
+        return 15;
+      default:
+        return 13;
+    }
   }
-}
 
   getMobileDescSizePx() {
-  switch (this.config.descSize) {
-    case "small":
-      return 11;
-    case "large":
-      return 14;
-    default:
-      return 12.5;
+    switch (this.config.descSize) {
+      case "small":
+        return 11;
+      case "large":
+        return 14;
+      default:
+        return 12.5;
+    }
   }
-}
 
   getCategorySizePx() {
     switch (this.config.categorySize) {
@@ -670,10 +619,6 @@ if (typeof design.overlayStrength !== "undefined") {
       const height = Math.ceil(shell.scrollHeight);
 
       try {
-        window.parent.postMessage({ type: "resize", height }, "*");
-      } catch (e) {}
-
-      try {
         this.style.height = `${height}px`;
       } catch (e) {}
     };
@@ -686,70 +631,6 @@ if (typeof design.overlayStrength !== "undefined") {
     setTimeout(sendHeight, 200);
     setTimeout(sendHeight, 600);
     setTimeout(sendHeight, 1200);
-  }
-
-  async loadCMSData() {
-    try {
-      const instance = this.getAttribute("instance");
-
-      if (!instance) {
-        console.warn("No instance yet — waiting...");
-        return;
-      }
-
-      const collectionId = "@ardoproductions/profiltergallery/portfolio-projects";
-
-      const response = await fetch(`https://www.wixapis.com/wix-data/v2/items/query`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": instance
-        },
-        body: JSON.stringify({
-          dataCollectionId: collectionId,
-          query: {
-            sort: [{ fieldName: "order", order: "ASC" }]
-          }
-        })
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error("CMS RESPONSE ERROR:", response.status, errorText);
-        return;
-      }
-
-      const data = await response.json();
-
-      if (!data?.dataItems?.length) {
-        console.warn("No CMS items found");
-        return;
-      }
-
-      const projects = data.dataItems.map((item, index) => {
-        const f = item.data || {};
-
-        return {
-          id: item._id || `project-${index + 1}`,
-          title: f.title || "Untitled Project",
-          category: f.category || "Uncategorized",
-          coverImage: this.normalizeImage(f.coverImage),
-          description: f.description || "",
-          images: Array.isArray(f.images)
-            ? f.images.map((img) => this.normalizeImage(img)).filter(Boolean)
-            : f.images
-              ? [this.normalizeImage(f.images)].filter(Boolean)
-              : [],
-          order: typeof f.order === "number" ? f.order : index + 1,
-          visible: f.visible !== false
-        };
-      });
-
-      this.setProjects(projects);
-
-    } catch (err) {
-      console.error("CMS LOAD FAILED:", err);
-    }
   }
 
   getStyles() {
@@ -862,34 +743,34 @@ if (typeof design.overlayStrength !== "undefined") {
           background: #0f1014;
         }
 
-  .pfg-image-wrap::after {
-  content: "";
-  position: absolute;
-  inset: auto 0 0 0;
-  height: 42%;
-  background: ${
-    this.config.textPanelStyle === "fade"
-      ? `linear-gradient(
-          to bottom,
-          rgba(16,17,23,0) 0%,
-          rgba(16,17,23,${Math.max(0.08, (this.config.overlayStrength || 72) / 400)}) 42%,
-          rgba(16,17,23,${Math.max(0.3, (this.config.overlayStrength || 72) / 100)}) 100%
-        )`
-      : "none"
-  };
-  pointer-events: none;
-  z-index: 1;
-}
+        .pfg-image-wrap::after {
+          content: "";
+          position: absolute;
+          inset: auto 0 0 0;
+          height: 42%;
+          background: ${
+            this.config.textPanelStyle === "fade"
+              ? `linear-gradient(
+                  to bottom,
+                  rgba(16,17,23,0) 0%,
+                  rgba(16,17,23,${Math.max(0.08, (this.config.overlayStrength || 72) / 400)}) 42%,
+                  rgba(16,17,23,${Math.max(0.3, (this.config.overlayStrength || 72) / 100)}) 100%
+                )`
+              : "none"
+          };
+          pointer-events: none;
+          z-index: 1;
+        }
 
-.pfg-image-wrap.is-empty::after {
-  display: none;
-}
+        .pfg-image-wrap.is-empty::after {
+          display: none;
+        }
 
-.pfg-image-empty {
-  width: 100%;
-  height: 100%;
-  background: transparent;
-}
+        .pfg-image-empty {
+          width: 100%;
+          height: 100%;
+          background: transparent;
+        }
 
         .pfg-image {
           width: 100%;
@@ -905,17 +786,17 @@ if (typeof design.overlayStrength !== "undefined") {
         }
 
         .pfg-card-body {
-  position: relative;
-  flex: 1 1 auto;
-  min-height: 0;
-  background: ${
-    this.config.textPanelStyle === "solid"
-      ? `rgba(${this.hexToRgb(this.config.cardPanelBg)}, ${Math.max(0.25, Math.min(1, (this.config.overlayStrength || 72) / 100))})`
-      : "transparent"
-  };
-  padding: 16px 16px 14px;
-  border-top: none;
-}
+          position: relative;
+          flex: 1 1 auto;
+          min-height: 0;
+          background: ${
+            this.config.textPanelStyle === "solid"
+              ? `rgba(${this.hexToRgb(this.config.cardPanelBg)}, ${Math.max(0.25, Math.min(1, (this.config.overlayStrength || 72) / 100))})`
+              : "transparent"
+          };
+          padding: 16px 16px 14px;
+          border-top: none;
+        }
 
         .pfg-content {
           display: flex;
@@ -1219,14 +1100,14 @@ if (typeof design.overlayStrength !== "undefined") {
         }
 
         .pfg-modal-image {
-  width: 100%;
-  height: min(42vh, 460px);
-  object-fit: ${this.config.modalImageFit || "cover"};
-  display: block;
-  border-radius: ${this.config.imageRadius}px;
-  margin-top: 12px;
-  background: #111217;
-}
+          width: 100%;
+          height: min(42vh, 460px);
+          object-fit: ${this.config.modalImageFit || "cover"};
+          display: block;
+          border-radius: ${this.config.imageRadius}px;
+          margin-top: 12px;
+          background: #111217;
+        }
 
         .pfg-modal-content {
           padding: 18px 4px 6px;
@@ -1534,11 +1415,11 @@ if (typeof design.overlayStrength !== "undefined") {
           }
 
           .pfg-modal-image {
-  height: min(34vh, 320px);
-  border-radius: ${this.config.imageRadius}px;
-  margin-top: 8px;
-  object-fit: ${this.config.modalImageFit || "cover"};
-}
+            height: min(34vh, 320px);
+            border-radius: ${this.config.imageRadius}px;
+            margin-top: 8px;
+            object-fit: ${this.config.modalImageFit || "cover"};
+          }
 
           .pfg-modal-content {
             padding: 16px 2px 8px;
@@ -1726,11 +1607,11 @@ if (typeof design.overlayStrength !== "undefined") {
     grid.innerHTML = visibleProjects.map((project) => `
       <article class="pfg-card" data-id="${this.escapeHtml(String(project.id))}">
         <div class="pfg-image-wrap ${project.coverImage ? "" : "is-empty"}">
-  ${project.coverImage
-    ? `<img class="pfg-image" src="${this.escapeHtml(project.coverImage)}" alt="${this.escapeHtml(project.title)}">`
-    : `<div class="pfg-image-empty"></div>`
-  }
-</div>
+          ${project.coverImage
+            ? `<img class="pfg-image" src="${this.escapeHtml(project.coverImage)}" alt="${this.escapeHtml(project.title)}">`
+            : `<div class="pfg-image-empty"></div>`
+          }
+        </div>
         <div class="pfg-card-body">
           <div class="pfg-content">
             ${this.config.showCategory
@@ -1781,7 +1662,7 @@ if (typeof design.overlayStrength !== "undefined") {
     mainImage.alt = project.title;
 
     const modalFit = project.modalImageFit || this.config.modalImageFit || "cover";
-mainImage.style.objectFit = modalFit;
+    mainImage.style.objectFit = modalFit;
 
     modalCategory.textContent = project.category;
     modalTitle.textContent = project.title;
