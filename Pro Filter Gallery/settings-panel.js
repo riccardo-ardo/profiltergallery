@@ -67,8 +67,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
 async function init() {
   loadState();
+  await loadStateFromWixProps();
   ensureSelectedProject();
-
   await bootstrapWixState();
 
   wireNavigation();
@@ -242,30 +242,29 @@ async function saveState() {
   }
 
   function setView(view) {
-    activeView = view;
+  activeView = view;
 
-    document.querySelectorAll(".view").forEach(v => {
-      v.classList.remove("active");
-    });
+  document.querySelectorAll(".view").forEach(v => {
+    v.classList.remove("active");
+  });
 
-    const target = document.getElementById(`view-${view}`);
-    if (target) target.classList.add("active");
+  const target = document.getElementById(`view-${view}`);
+  if (target) target.classList.add("active");
 
-    document.querySelectorAll(".rail-btn").forEach(btn => {
-      btn.classList.remove("active");
-      if (btn.dataset.viewTarget === view) {
-        btn.classList.add("active");
-      }
-      
-    document.querySelectorAll(".mobile-nav-btn").forEach(btn => {
-  btn.classList.remove("active");
-  if (btn.dataset.viewTarget === view) {
-    btn.classList.add("active");
-  }
-});  
-      
-    });
-  }
+  document.querySelectorAll(".rail-btn").forEach(btn => {
+    btn.classList.remove("active");
+    if (btn.dataset.viewTarget === view) {
+      btn.classList.add("active");
+    }
+  });
+
+  document.querySelectorAll(".mobile-nav-btn").forEach(btn => {
+    btn.classList.remove("active");
+    if (btn.dataset.viewTarget === view) {
+      btn.classList.add("active");
+    }
+  });
+}
 
   function wireActions() {
     byId("newProjectBtn")?.addEventListener("click", createProject);
