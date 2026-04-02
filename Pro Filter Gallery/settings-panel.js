@@ -65,8 +65,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
   init();
 
-  function init() {
+async function init() {
   loadState();
+  await loadStateFromWixProps();
   ensureSelectedProject();
   wireNavigation();
   wireActions();
@@ -75,6 +76,51 @@ document.addEventListener("DOMContentLoaded", () => {
   wireResponsivePreview();
   setView(getInitialView());
   renderAll();
+}
+
+  async function loadStateFromWixProps() {
+  if (!window.Wix || typeof Wix.getProp !== "function") return;
+
+  try {
+    const projectsProp = await Wix.getProp("projects");
+    const accent = await Wix.getProp("accent");
+    const columns = await Wix.getProp("columns");
+    const gap = await Wix.getProp("gap");
+    const radius = await Wix.getProp("radius");
+    const cardpanelbg = await Wix.getProp("cardpanelbg");
+    const showcategory = await Wix.getProp("showcategory");
+    const showfilters = await Wix.getProp("showfilters");
+    const enablemodal = await Wix.getProp("enablemodal");
+    const titlesize = await Wix.getProp("titlesize");
+    const descsize = await Wix.getProp("descsize");
+    const categorysize = await Wix.getProp("categorysize");
+    const modalimagefit = await Wix.getProp("modalimagefit");
+
+    if (projectsProp) {
+      try {
+        const parsedProjects = JSON.parse(projectsProp);
+        if (Array.isArray(parsedProjects) && parsedProjects.length) {
+          state.projects = parsedProjects.map(normalizeProject);
+        }
+      } catch (e) {
+        console.warn("Could not parse Wix projects prop", e);
+      }
+    }
+
+    if (accent) state.design.accentColor = accent;
+    if (columns) state.design.columns = Number(columns);
+    if (gap) state.design.cardGap = Number(gap);
+    if (radius) state.design.cardRadius = Number(radius);
+    if (cardpanelbg) state.design.cardBackground = cardpanelbg;
+    if (typeof showcategory === "string") state.design.showCategory = showcategory === "true";
+    if (typeof showfilters === "string") state.design.showFilters = showfilters === "true";
+    if (typeof enablemodal === "string") state.design.enableModal = enablemodal === "true";
+    if (titlesize) state.design.titleSize = mapPresetToSliderValue(titlesize);
+    if (descsize) state.design.metaSize = mapPresetToSliderValue(descsize);
+    if (modalimagefit) state.design.modalImageFit = modalimagefit;
+  } catch (error) {
+    console.warn("Could not load Wix props into settings panel", error);
+  }
 }
 
 function wireResponsivePreview() {
@@ -107,14 +153,34 @@ function wireResponsivePreview() {
     }
   }
 
-function saveState() {
+async function saveState() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
 
-  // 🔥 Force clean update every time
-  window.parent.postMessage({
-    type: "PRO_FILTER_GALLERY_SETTINGS_UPDATED",
-    payload: JSON.parse(JSON.stringify(state)) // deep clone to avoid reference issues
-  }, "*");
+  await syncStateToWix();
+}
+  async function syncStateToWix() {
+  if (!window.Wix || typeof Wix.setProp !== "function") return;
+
+  try {
+    // full projects payload as JSON string
+    await Wix.setProp("projects", JSON.stringify(state.projects));
+
+    // design props
+    await Wix.setProp("accent", String(state.design.accentColor || "#7c9cff"));
+    await Wix.setProp("columns", String(state.design.columns ?? 3));
+    await Wix.setProp("gap", String(state.design.cardGap ?? 16));
+    await Wix.setProp("radius", String(state.design.cardRadius ?? 20));
+    await Wix.setProp("cardpanelbg", String(state.design.cardBackground || "#111722"));
+    await Wix.setProp("showcategory", String(!!state.design.showCategory));
+    await Wix.setProp("showfilters", String(!!state.design.showFilters));
+    await Wix.setProp("enablemodal", String(!!state.design.enableModal));
+    await Wix.setProp("titlesize", mapSliderToSizePreset(state.design.titleSize));
+    await Wix.setProp("descsize", mapSliderToSizePreset(state.design.metaSize));
+    await Wix.setProp("categorysize", Number(state.design.metaSize) <= 10 ? "small" : "medium");
+    await Wix.setProp("modalimagefit", String(state.design.modalImageFit || "cover"));
+  } catch (error) {
+    console.warn("Could not sync props to Wix", error);
+  }
 }
 
   function ensureSelectedProject() {
@@ -917,4 +983,17 @@ if (state.design.textPanelStyle === "solid") {
   function escapeAttr(str) {
     return String(str).replaceAll('"', "&quot;");
   }
+
+  function mapSliderToSizePreset(value) {
+  const n = Number(value);
+  if (n <= 15) return "small";
+  if (n >= 18) return "large";
+  return "medium";
+}
+
+  function mapPresetToSliderValue(value) {
+  if (value === "small") return 14;
+  if (value === "large") return 20;
+  return 16;
+}
 });
