@@ -247,14 +247,18 @@ class ProFilterGallery extends HTMLElement {
         this.config.categoryColor = newValue || "#4d8dff";
         break;
 
-      case "modalbg":
+          case "modalbg":
         this.config.modalBg = newValue || "#090a0e";
         break;
 
-        case "modalimagefit":
-  this.config.modalImageFit = newValue === "contain" ? "contain" : "cover";
-  break;
-        
+      case "modalimagefit":
+        this.config.modalImageFit = newValue === "contain" ? "contain" : "cover";
+        break;
+
+      case "textpanelstyle":
+        this.config.textPanelStyle = newValue === "solid" ? "solid" : "fade";
+        break;
+
       case "modaltitlecolor":
         this.config.modalTitleColor = newValue || "#ffffff";
         break;
