@@ -4,6 +4,10 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Pro Filter Gallery – Premium Settings Panel</title>
+
+  <!-- Wix SDK: required for Wix.getProp / Wix.setProp in the settings panel -->
+  <script src="https://static.parastorage.com/services/js-sdk/1.388.0/app-sdk.js"></script>
+
   <style>
     :root{
       --bg:#07090d;
@@ -51,11 +55,11 @@
       overflow:auto;
     }
 
-   .shell{
-  min-height:100vh;
-  display:grid;
-  grid-template-columns: var(--sidebar) 1fr;
-}
+    .shell{
+      min-height:100vh;
+      display:grid;
+      grid-template-columns: var(--sidebar) 1fr;
+    }
 
     .sidebar{
       padding:18px;
@@ -78,7 +82,6 @@
       display:grid;place-items:center;
       font-weight:700;font-size:18px;letter-spacing:.02em;
     }
-    
 
     .nav-rail{
       display:flex;flex-direction:column;gap:10px;align-items:center;
@@ -181,17 +184,17 @@
     .btn.icon{width:42px;height:42px;padding:0;justify-content:center}
 
     .view{
-  display:none;
-  min-height:0;
-  flex:1;
-  overflow:visible;
-}
+      display:none;
+      min-height:0;
+      flex:1;
+      overflow:visible;
+    }
 
-   .view.active{
-  display:block;
-  overflow:visible;
-  padding-right:2px;
-}
+    .view.active{
+      display:block;
+      overflow:visible;
+      padding-right:2px;
+    }
 
     .hub-grid{
       height:100%;
@@ -381,20 +384,20 @@
       background:#0f131a;
     }
     .snapshot-card::before{
-  content:"";
-  position:absolute;
-  inset:0;
-  border-radius:inherit;
-  background:linear-gradient(180deg, rgba(0,0,0,0) 30%, rgba(2,4,8,.74) 100%);
-  z-index:1;
-  pointer-events:none;
-}
+      content:"";
+      position:absolute;
+      inset:0;
+      border-radius:inherit;
+      background:linear-gradient(180deg, rgba(0,0,0,0) 30%, rgba(2,4,8,.74) 100%);
+      z-index:1;
+      pointer-events:none;
+    }
     .snapshot-card .thumb{
-  position:absolute;
-  inset:0;
-  border-radius:inherit;
-  background:center/cover no-repeat;
-}
+      position:absolute;
+      inset:0;
+      border-radius:inherit;
+      background:center/cover no-repeat;
+    }
     .snapshot-card .copy{
       position:absolute;left:0;right:0;bottom:0;
       z-index:2;
@@ -467,8 +470,8 @@
     }
 
     .mobile-nav{
-  display:none;
-}
+      display:none;
+    }
 
     .design-sidebar, .design-preview, .content-sidebar, .content-main{
       min-height:0;
@@ -878,504 +881,502 @@
       transform:translateY(0);
     }
 
-@media (max-width: 1280px){
-  .shell{
-    grid-template-columns:72px 1fr;
-  }
-
-  .main{
-    padding:20px;
-    gap:16px;
-  }
-
-  .topbar{
-    padding:18px 18px;
-    gap:18px;
-  }
-
-  .hub-grid,
-  .design-layout,
-  .content-layout,
-  .editor-grid{
-    grid-template-columns:1fr;
-  }
-
-  .design-sidebar .section-stack,
-  .content-sidebar .section-stack,
-  .editor-wrap,
-  .design-canvas{
-    overflow:visible;
-  }
-
-  .list{
-    max-height:none;
-  }
-
-  .gallery-grid{
-    grid-template-columns:repeat(3,minmax(0,1fr));
-  }
-}
-
-@media (max-width: 980px){
-  .shell{
-    grid-template-columns:1fr;
-    height:auto;
-    min-height:100vh;
-  }
-
-  .sidebar{
-    display:none;
-  }
-
-  .main{
-    padding:16px;
-    gap:16px;
-    overflow:visible;
-  }
-
-  .topbar{
-    flex-direction:column;
-    align-items:stretch;
-    padding:18px;
-    gap:16px;
-    border-radius:22px;
-  }
-
-  .title-wrap h1{
-    font-size:22px;
-  }
-
-  .title-wrap p{
-    font-size:14px;
-    line-height:1.45;
-    max-width:520px;
-  }
-
-  .top-actions{
-    display:grid;
-    grid-template-columns:1fr 1fr;
-    gap:12px;
-    width:100%;
-  }
-
-  .top-actions .btn,
-  .top-actions .badge{
-    width:100%;
-    justify-content:center;
-    min-height:48px;
-  }
-
-  .badge{
-    display:flex;
-  }
-
-  .panel{
-    border-radius:24px;
-  }
-
-  .hero{
-    padding:24px;
-  }
-
-  .hero h2{
-    font-size:34px;
-    max-width:none;
-  }
-
-  .hero p{
-    font-size:14px;
-    max-width:none;
-  }
-
-  .hub-actions{
-    grid-template-columns:1fr;
-    margin-top:24px;
-  }
-
-  .action-card{
-    min-height:auto;
-    padding:22px 22px 20px;
-  }
-
-  .stats{
-    padding:20px;
-  }
-
-  .mini-grid,
-  .snapshot-stats,
-  .snapshot-previews,
-  .sample-cards{
-    grid-template-columns:1fr 1fr;
-  }
-
-  .gallery-preview{
-    padding:16px;
-    border-radius:22px;
-  }
-
-  .gallery-grid{
-    grid-template-columns:repeat(2,minmax(0,1fr));
-    gap:12px;
-  }
-
-  .gallery-grid .gallery-item:nth-child(n+3){
-  display:none;
-}
-
-  .gallery-item{
-    min-height:200px;
-  }
-
-  .section-card{
-    padding:16px;
-    border-radius:18px;
-  }
-
-  .field-grid{
-    gap:10px;
-  }
-
-  .editor-grid{
-    gap:16px;
-  }
-
-  .cover-preview{
-    height:220px;
-  }
-
-  .thumb-grid{
-    grid-template-columns:repeat(3,minmax(0,1fr));
-  }
-
-  .gallery-section .thumb-grid{
-    grid-template-columns:repeat(3,minmax(0,1fr));
-  }
-}
-
-@media (max-width: 640px){
-  body{
-    overflow:auto;
-  }
-
-  .main{
-    padding:12px;
-    gap:14px;
-  }
-
-  .topbar{
-    padding:16px;
-    border-radius:20px;
-  }
-
-  .title-wrap h1{
-    font-size:20px;
-    line-height:1.05;
-  }
-
-  .title-wrap p{
-    font-size:13px;
-    line-height:1.4;
-  }
-
-  .top-actions{
-    grid-template-columns:1fr;
-  }
-
-  .top-actions .btn,
-  .top-actions .badge{
-    min-height:46px;
-    border-radius:14px;
-  }
-
-  .panel{
-    border-radius:20px;
-  }
-
-  .hero{
-    padding:20px;
-  }
-
-  .eyebrow{
-    font-size:11px;
-    padding:7px 10px;
-  }
-
-  .hero h2{
-    font-size:28px;
-    line-height:1.02;
-    margin:14px 0 10px;
-  }
-
-  .hero p{
-    font-size:13px;
-    line-height:1.5;
-  }
-
-  .hub-actions{
-    gap:12px;
-  }
-
-  .action-card{
-    padding:18px 18px 16px;
-    border-radius:18px;
-  }
-
-  .action-icon{
-    width:46px;
-    height:46px;
-    border-radius:14px;
-    margin-bottom:14px;
-    font-size:18px;
-  }
-
-  .action-card h3{
-    font-size:18px;
-    margin-bottom:8px;
-  }
-
-  .action-card p{
-    font-size:13px;
-    line-height:1.5;
-    max-width:100%;
-  }
-
-  .action-card span{
-    font-size:12px;
-  }
-
-  .stats{
-    padding:18px;
-  }
-
-  .mini-grid,
-  .snapshot-stats,
-  .snapshot-previews,
-  .sample-cards{
-    grid-template-columns:1fr;
-  }
-
-  .preview-box{
-    padding:14px;
-    border-radius:18px;
-  }
-
-  .snapshot-card{
-    min-height:132px;
-  }
-
-  .design-canvas{
-    padding:14px;
-    gap:14px;
-  }
-
-  .preview-shell{
-    padding:14px;
-    border-radius:20px;
-  }
-
-  .gallery-preview{
-    padding:16px;
-    border-radius:18px;
-  }
-
-  .gallery-bar{
-    flex-direction:column;
-    align-items:flex-start;
-    gap:12px;
-    margin-bottom:14px;
-  }
-
-  .gallery-title{
-    font-size:17px;
-  }
-
-  .gallery-filters{
-    gap:8px;
-  }
-
-  .chip{
-    padding:7px 10px;
-    font-size:11px;
-  }
-
-  .gallery-grid{
-    grid-template-columns:1fr;
-    gap:12px;
-  }
-
-  .gallery-item{
-    min-height:240px;
-    border-radius:16px;
-  }
-
-  .gallery-copy{
-    padding:14px;
-  }
-
-  .gallery-copy strong{
-    font-size:16px;
-  }
-
-  .gallery-copy small{
-    font-size:12px;
-  }
-
-  .section-card{
-    padding:14px;
-    border-radius:16px;
-  }
-
-  .section-card h4{
-    font-size:14px;
-    margin-bottom:12px;
-  }
-
-  .field label{
-    font-size:11px;
-  }
-
-  .hint{
-    font-size:10px;
-    line-height:1.4;
-  }
-
-  input[type="text"],
-  textarea,
-  select,
-  input[type="number"]{
-    padding:12px 12px;
-    border-radius:12px;
-    font-size:14px;
-  }
-
-  .searchbox{
-    padding:11px 12px;
-    border-radius:14px;
-  }
-
-  .project-row{
-    grid-template-columns:48px 1fr auto;
-    gap:10px;
-    padding:10px;
-    border-radius:16px;
-  }
-
-  .row-thumb{
-    width:48px;
-    height:48px;
-    border-radius:12px;
-  }
-
-  .row-copy strong{
-    font-size:13px;
-  }
-
-  .row-copy small{
-    font-size:11px;
-    margin-top:4px;
-  }
-
-  .editor-wrap{
-    padding:14px;
-  }
-
-  .cover-preview{
-    height:180px;
-    border-radius:16px;
-  }
-
-  .thumb-grid,
-  .gallery-section .thumb-grid{
-    grid-template-columns:repeat(2,minmax(0,1fr));
-  }
-
-  .upload-zone{
-    padding:14px;
-    border-radius:14px;
-  }
-
-  .btn{
-    padding:12px 14px;
-    border-radius:14px;
-    font-size:13px;
-  }
-
-  .btn.small{
-    padding:10px 12px;
-    border-radius:12px;
-    font-size:12px;
-  }
-
-  .mobile-nav{
-  display:grid;
-  grid-template-columns:1fr 1fr 1fr;
-  gap:8px;
-  position:sticky;
-  top:12px;
-  z-index:30;
-}
-
-.mobile-nav-btn{
-  appearance:none;
-  border:none;
-  cursor:pointer;
-  min-height:42px;
-  border-radius:14px;
-  padding:10px 12px;
-  font-size:12px;
-  font-weight:700;
-  color:var(--text);
-  background:rgba(255,255,255,.05);
-  border:1px solid rgba(255,255,255,.08);
-}
-
-.mobile-nav-btn.active{
-  background:linear-gradient(135deg, rgba(124,156,255,.22), rgba(157,124,255,.18));
-  border-color:rgba(150,160,255,.28);
-}
-
-.design-preview{
-  min-height:auto;
-}
-
-.design-canvas{
-  overflow:visible;
-}
-
-.preview-shell{
-  min-height:auto;
-  padding:12px;
-}
-
-.gallery-preview{
-  padding:12px;
-}
-
-.gallery-bar{
-  gap:10px;
-  margin-bottom:12px;
-}
-
-.gallery-filters{
-  gap:6px;
-}
-
-.gallery-grid{
-  grid-template-columns:1fr;
-  gap:10px;
-}
-
-.gallery-item{
-  min-height:260px;
-  width:100%;
-}
-
-.gallery-grid .gallery-item:nth-child(n+2){
-  display:none;
-}
-
-}
-
+    @media (max-width: 1280px){
+      .shell{
+        grid-template-columns:72px 1fr;
+      }
+
+      .main{
+        padding:20px;
+        gap:16px;
+      }
+
+      .topbar{
+        padding:18px 18px;
+        gap:18px;
+      }
+
+      .hub-grid,
+      .design-layout,
+      .content-layout,
+      .editor-grid{
+        grid-template-columns:1fr;
+      }
+
+      .design-sidebar .section-stack,
+      .content-sidebar .section-stack,
+      .editor-wrap,
+      .design-canvas{
+        overflow:visible;
+      }
+
+      .list{
+        max-height:none;
+      }
+
+      .gallery-grid{
+        grid-template-columns:repeat(3,minmax(0,1fr));
+      }
+    }
+
+    @media (max-width: 980px){
+      .shell{
+        grid-template-columns:1fr;
+        height:auto;
+        min-height:100vh;
+      }
+
+      .sidebar{
+        display:none;
+      }
+
+      .main{
+        padding:16px;
+        gap:16px;
+        overflow:visible;
+      }
+
+      .topbar{
+        flex-direction:column;
+        align-items:stretch;
+        padding:18px;
+        gap:16px;
+        border-radius:22px;
+      }
+
+      .title-wrap h1{
+        font-size:22px;
+      }
+
+      .title-wrap p{
+        font-size:14px;
+        line-height:1.45;
+        max-width:520px;
+      }
+
+      .top-actions{
+        display:grid;
+        grid-template-columns:1fr 1fr;
+        gap:12px;
+        width:100%;
+      }
+
+      .top-actions .btn,
+      .top-actions .badge{
+        width:100%;
+        justify-content:center;
+        min-height:48px;
+      }
+
+      .badge{
+        display:flex;
+      }
+
+      .panel{
+        border-radius:24px;
+      }
+
+      .hero{
+        padding:24px;
+      }
+
+      .hero h2{
+        font-size:34px;
+        max-width:none;
+      }
+
+      .hero p{
+        font-size:14px;
+        max-width:none;
+      }
+
+      .hub-actions{
+        grid-template-columns:1fr;
+        margin-top:24px;
+      }
+
+      .action-card{
+        min-height:auto;
+        padding:22px 22px 20px;
+      }
+
+      .stats{
+        padding:20px;
+      }
+
+      .mini-grid,
+      .snapshot-stats,
+      .snapshot-previews,
+      .sample-cards{
+        grid-template-columns:1fr 1fr;
+      }
+
+      .gallery-preview{
+        padding:16px;
+        border-radius:22px;
+      }
+
+      .gallery-grid{
+        grid-template-columns:repeat(2,minmax(0,1fr));
+        gap:12px;
+      }
+
+      .gallery-grid .gallery-item:nth-child(n+3){
+        display:none;
+      }
+
+      .gallery-item{
+        min-height:200px;
+      }
+
+      .section-card{
+        padding:16px;
+        border-radius:18px;
+      }
+
+      .field-grid{
+        gap:10px;
+      }
+
+      .editor-grid{
+        gap:16px;
+      }
+
+      .cover-preview{
+        height:220px;
+      }
+
+      .thumb-grid{
+        grid-template-columns:repeat(3,minmax(0,1fr));
+      }
+
+      .gallery-section .thumb-grid{
+        grid-template-columns:repeat(3,minmax(0,1fr));
+      }
+    }
+
+    @media (max-width: 640px){
+      body{
+        overflow:auto;
+      }
+
+      .main{
+        padding:12px;
+        gap:14px;
+      }
+
+      .topbar{
+        padding:16px;
+        border-radius:20px;
+      }
+
+      .title-wrap h1{
+        font-size:20px;
+        line-height:1.05;
+      }
+
+      .title-wrap p{
+        font-size:13px;
+        line-height:1.4;
+      }
+
+      .top-actions{
+        grid-template-columns:1fr;
+      }
+
+      .top-actions .btn,
+      .top-actions .badge{
+        min-height:46px;
+        border-radius:14px;
+      }
+
+      .panel{
+        border-radius:20px;
+      }
+
+      .hero{
+        padding:20px;
+      }
+
+      .eyebrow{
+        font-size:11px;
+        padding:7px 10px;
+      }
+
+      .hero h2{
+        font-size:28px;
+        line-height:1.02;
+        margin:14px 0 10px;
+      }
+
+      .hero p{
+        font-size:13px;
+        line-height:1.5;
+      }
+
+      .hub-actions{
+        gap:12px;
+      }
+
+      .action-card{
+        padding:18px 18px 16px;
+        border-radius:18px;
+      }
+
+      .action-icon{
+        width:46px;
+        height:46px;
+        border-radius:14px;
+        margin-bottom:14px;
+        font-size:18px;
+      }
+
+      .action-card h3{
+        font-size:18px;
+        margin-bottom:8px;
+      }
+
+      .action-card p{
+        font-size:13px;
+        line-height:1.5;
+        max-width:100%;
+      }
+
+      .action-card span{
+        font-size:12px;
+      }
+
+      .stats{
+        padding:18px;
+      }
+
+      .mini-grid,
+      .snapshot-stats,
+      .snapshot-previews,
+      .sample-cards{
+        grid-template-columns:1fr;
+      }
+
+      .preview-box{
+        padding:14px;
+        border-radius:18px;
+      }
+
+      .snapshot-card{
+        min-height:132px;
+      }
+
+      .design-canvas{
+        padding:14px;
+        gap:14px;
+      }
+
+      .preview-shell{
+        padding:14px;
+        border-radius:20px;
+      }
+
+      .gallery-preview{
+        padding:16px;
+        border-radius:18px;
+      }
+
+      .gallery-bar{
+        flex-direction:column;
+        align-items:flex-start;
+        gap:12px;
+        margin-bottom:14px;
+      }
+
+      .gallery-title{
+        font-size:17px;
+      }
+
+      .gallery-filters{
+        gap:8px;
+      }
+
+      .chip{
+        padding:7px 10px;
+        font-size:11px;
+      }
+
+      .gallery-grid{
+        grid-template-columns:1fr;
+        gap:12px;
+      }
+
+      .gallery-item{
+        min-height:240px;
+        border-radius:16px;
+      }
+
+      .gallery-copy{
+        padding:14px;
+      }
+
+      .gallery-copy strong{
+        font-size:16px;
+      }
+
+      .gallery-copy small{
+        font-size:12px;
+      }
+
+      .section-card{
+        padding:14px;
+        border-radius:16px;
+      }
+
+      .section-card h4{
+        font-size:14px;
+        margin-bottom:12px;
+      }
+
+      .field label{
+        font-size:11px;
+      }
+
+      .hint{
+        font-size:10px;
+        line-height:1.4;
+      }
+
+      input[type="text"],
+      textarea,
+      select,
+      input[type="number"]{
+        padding:12px 12px;
+        border-radius:12px;
+        font-size:14px;
+      }
+
+      .searchbox{
+        padding:11px 12px;
+        border-radius:14px;
+      }
+
+      .project-row{
+        grid-template-columns:48px 1fr auto;
+        gap:10px;
+        padding:10px;
+        border-radius:16px;
+      }
+
+      .row-thumb{
+        width:48px;
+        height:48px;
+        border-radius:12px;
+      }
+
+      .row-copy strong{
+        font-size:13px;
+      }
+
+      .row-copy small{
+        font-size:11px;
+        margin-top:4px;
+      }
+
+      .editor-wrap{
+        padding:14px;
+      }
+
+      .cover-preview{
+        height:180px;
+        border-radius:16px;
+      }
+
+      .thumb-grid,
+      .gallery-section .thumb-grid{
+        grid-template-columns:repeat(2,minmax(0,1fr));
+      }
+
+      .upload-zone{
+        padding:14px;
+        border-radius:14px;
+      }
+
+      .btn{
+        padding:12px 14px;
+        border-radius:14px;
+        font-size:13px;
+      }
+
+      .btn.small{
+        padding:10px 12px;
+        border-radius:12px;
+        font-size:12px;
+      }
+
+      .mobile-nav{
+        display:grid;
+        grid-template-columns:1fr 1fr 1fr;
+        gap:8px;
+        position:sticky;
+        top:12px;
+        z-index:30;
+      }
+
+      .mobile-nav-btn{
+        appearance:none;
+        border:none;
+        cursor:pointer;
+        min-height:42px;
+        border-radius:14px;
+        padding:10px 12px;
+        font-size:12px;
+        font-weight:700;
+        color:var(--text);
+        background:rgba(255,255,255,.05);
+        border:1px solid rgba(255,255,255,.08);
+      }
+
+      .mobile-nav-btn.active{
+        background:linear-gradient(135deg, rgba(124,156,255,.22), rgba(157,124,255,.18));
+        border-color:rgba(150,160,255,.28);
+      }
+
+      .design-preview{
+        min-height:auto;
+      }
+
+      .design-canvas{
+        overflow:visible;
+      }
+
+      .preview-shell{
+        min-height:auto;
+        padding:12px;
+      }
+
+      .gallery-preview{
+        padding:12px;
+      }
+
+      .gallery-bar{
+        gap:10px;
+        margin-bottom:12px;
+      }
+
+      .gallery-filters{
+        gap:6px;
+      }
+
+      .gallery-grid{
+        grid-template-columns:1fr;
+        gap:10px;
+      }
+
+      .gallery-item{
+        min-height:260px;
+        width:100%;
+      }
+
+      .gallery-grid .gallery-item:nth-child(n+2){
+        display:none;
+      }
+    }
   </style>
 </head>
 <body>
@@ -1387,8 +1388,7 @@
         <button class="rail-btn" data-view-target="design" title="Design">✦</button>
         <button class="rail-btn" data-view-target="content" title="Content">▣</button>
       </div>
-      <div class="sidebar-footer">
-      </div>
+      <div class="sidebar-footer"></div>
     </aside>
 
     <main class="main">
@@ -1407,10 +1407,10 @@
       </header>
 
       <div class="mobile-nav">
-  <button class="mobile-nav-btn active" data-view-target="hub">Home</button>
-  <button class="mobile-nav-btn" data-view-target="design">Design</button>
-  <button class="mobile-nav-btn" data-view-target="content">Content</button>
-</div>
+        <button class="mobile-nav-btn active" data-view-target="hub">Home</button>
+        <button class="mobile-nav-btn" data-view-target="design">Design</button>
+        <button class="mobile-nav-btn" data-view-target="content">Content</button>
+      </div>
 
       <section class="view active" id="view-hub">
         <div class="hub-grid">
@@ -1518,45 +1518,45 @@
               </div>
 
               <div class="section-card">
-  <h4>Cards</h4>
-  <div class="field-grid">
-    <div class="field inline grow">
-      <div>
-        <label for="cardBackground">Card Background</label>
-        <div class="hint">Main card surface</div>
-      </div>
-      <input type="color" id="cardBackground" />
-    </div>
+                <h4>Cards</h4>
+                <div class="field-grid">
+                  <div class="field inline grow">
+                    <div>
+                      <label for="cardBackground">Card Background</label>
+                      <div class="hint">Main card surface</div>
+                    </div>
+                    <input type="color" id="cardBackground" />
+                  </div>
 
-    <div class="field">
-      <label for="textPanelStyle">Text Background Style</label>
-      <select id="textPanelStyle">
-        <option value="fade">Fade</option>
-        <option value="solid">Solid</option>
-      </select>
-      <div class="hint">Choose between a soft gradient fade or a solid text panel.</div>
-    </div>
+                  <div class="field">
+                    <label for="textPanelStyle">Text Background Style</label>
+                    <select id="textPanelStyle">
+                      <option value="fade">Fade</option>
+                      <option value="solid">Solid</option>
+                    </select>
+                    <div class="hint">Choose between a soft gradient fade or a solid text panel.</div>
+                  </div>
 
-    <div class="field inline grow">
-      <div>
-        <label for="overlayStrength">Background Strength</label>
-        <div class="hint"><span id="overlayStrengthValue"></span>%</div>
-      </div>
-      <input type="range" min="20" max="100" step="1" id="overlayStrength" />
-    </div>
+                  <div class="field inline grow">
+                    <div>
+                      <label for="overlayStrength">Background Strength</label>
+                      <div class="hint"><span id="overlayStrengthValue"></span>%</div>
+                    </div>
+                    <input type="range" min="20" max="100" step="1" id="overlayStrength" />
+                  </div>
 
-    <div class="row-between">
-      <div>
-        <label>Show category label</label>
-        <div class="hint">Display small category text on cards</div>
-      </div>
-      <label class="switch">
-        <input type="checkbox" id="showCategory" />
-        <span class="slider"></span>
-      </label>
-    </div>
-  </div>
-</div>
+                  <div class="row-between">
+                    <div>
+                      <label>Show category label</label>
+                      <div class="hint">Display small category text on cards</div>
+                    </div>
+                    <label class="switch">
+                      <input type="checkbox" id="showCategory" />
+                      <span class="slider"></span>
+                    </label>
+                  </div>
+                </div>
+              </div>
 
               <div class="section-card">
                 <h4>Typography</h4>
@@ -1599,40 +1599,40 @@
               </div>
 
               <div class="section-card">
-  <h4>Modal</h4>
-  <div class="field-grid">
-    <div class="row-between">
-      <div>
-        <label>Enable modal</label>
-        <div class="hint">Open project details on card click</div>
-      </div>
-      <label class="switch">
-        <input type="checkbox" id="enableModal" />
-        <span class="slider"></span>
-      </label>
-    </div>
+                <h4>Modal</h4>
+                <div class="field-grid">
+                  <div class="row-between">
+                    <div>
+                      <label>Enable modal</label>
+                      <div class="hint">Open project details on card click</div>
+                    </div>
+                    <label class="switch">
+                      <input type="checkbox" id="enableModal" />
+                      <span class="slider"></span>
+                    </label>
+                  </div>
 
-    <div class="field">
-      <label for="modalImageFit">Modal Image Fit</label>
-      <select id="modalImageFit">
-        <option value="cover">Cover (cropped)</option>
-        <option value="contain">Contain (full image)</option>
-      </select>
-      <div class="hint">Choose whether modal images fill the frame or show fully without cropping.</div>
-    </div>
+                  <div class="field">
+                    <label for="modalImageFit">Modal Image Fit</label>
+                    <select id="modalImageFit">
+                      <option value="cover">Cover (cropped)</option>
+                      <option value="contain">Contain (full image)</option>
+                    </select>
+                    <div class="hint">Choose whether modal images fill the frame or show fully without cropping.</div>
+                  </div>
 
-    <div class="row-between">
-      <div>
-        <label>Show gallery count</label>
-        <div class="hint">Small count badge in preview</div>
-      </div>
-      <label class="switch">
-        <input type="checkbox" id="showGalleryCount" />
-        <span class="slider"></span>
-      </label>
-    </div>
-  </div>
-</div>
+                  <div class="row-between">
+                    <div>
+                      <label>Show gallery count</label>
+                      <div class="hint">Small count badge in preview</div>
+                    </div>
+                    <label class="switch">
+                      <input type="checkbox" id="showGalleryCount" />
+                      <span class="slider"></span>
+                    </label>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -1675,8 +1675,7 @@
             </div>
           </div>
 
-          
-<div class="content-main">
+          <div class="content-main">
             <div class="panel editor-wrap">
               <div id="editorEmpty" class="empty">
                 <div>
@@ -1697,47 +1696,46 @@
                   </div>
                 </div>
 
-                
-<div class="editor-grid">
+                <div class="editor-grid">
                   <div>
                     <div class="section-card">
                       <div class="field-grid">
-  <div class="field">
-    <label for="projectTitle">Title</label>
-    <input type="text" id="projectTitle" placeholder="e.g. Studio Identity" />
-  </div>
+                        <div class="field">
+                          <label for="projectTitle">Title</label>
+                          <input type="text" id="projectTitle" placeholder="e.g. Studio Identity" />
+                        </div>
 
-  <div class="field">
-    <label for="projectCategory">Category</label>
-    <input type="text" id="projectCategory" placeholder="e.g. Branding" />
-  </div>
+                        <div class="field">
+                          <label for="projectCategory">Category</label>
+                          <input type="text" id="projectCategory" placeholder="e.g. Branding" />
+                        </div>
 
-  <div class="field">
-    <label for="projectModalImageFit">Modal Image Fit</label>
-    <select id="projectModalImageFit">
-      <option value="">Use global setting</option>
-      <option value="cover">Cover (cropped)</option>
-      <option value="contain">Contain (full image)</option>
-    </select>
-    <div class="hint">Override the default modal image fit for this project only.</div>
-  </div>
+                        <div class="field">
+                          <label for="projectModalImageFit">Modal Image Fit</label>
+                          <select id="projectModalImageFit">
+                            <option value="">Use global setting</option>
+                            <option value="cover">Cover (cropped)</option>
+                            <option value="contain">Contain (full image)</option>
+                          </select>
+                          <div class="hint">Override the default modal image fit for this project only.</div>
+                        </div>
 
-  <div class="field">
-    <label for="projectDescription">Description</label>
-    <textarea id="projectDescription" placeholder="Tell the story behind this project."></textarea>
-  </div>
+                        <div class="field">
+                          <label for="projectDescription">Description</label>
+                          <textarea id="projectDescription" placeholder="Tell the story behind this project."></textarea>
+                        </div>
 
-  <div class="row-between">
-    <div>
-      <label>Visible in widget</label>
-      <div class="hint">Hide projects without deleting them</div>
-    </div>
-    <label class="switch">
-      <input type="checkbox" id="projectVisible" />
-      <span class="slider"></span>
-    </label>
-  </div>
-</div>
+                        <div class="row-between">
+                          <div>
+                            <label>Visible in widget</label>
+                            <div class="hint">Hide projects without deleting them</div>
+                          </div>
+                          <label class="switch">
+                            <input type="checkbox" id="projectVisible" />
+                            <span class="slider"></span>
+                          </label>
+                        </div>
+                      </div>
                     </div>
 
                     <div class="section-card gallery-section">
@@ -1789,6 +1787,6 @@
 
   <div class="toast" id="toast"></div>
 
-<script src="settings-panel.js"></script>
+  <script src="settings-panel.js"></script>
 </body>
 </html>
