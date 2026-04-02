@@ -25,6 +25,8 @@ class ProFilterGallery extends HTMLElement {
 
       showDescription: true,
       showCategory: true,
+      showFilters: true,
+      enableModal: true,
       textAlign: "left",
       showShadow: true,
       hoverEffect: true,
@@ -43,25 +45,21 @@ class ProFilterGallery extends HTMLElement {
       pillText: "rgba(255,255,255,0.82)",
 
       cardPanelBg: "#101117",
+      textPanelStyle: "fade",
+      overlayStrength: 72,
       titleColor: "#ffffff",
       descColor: "rgba(255,255,255,0.78)",
       categoryColor: "#4d8dff",
 
       modalBg: "#090a0e",
+      modalImageFit: "cover",
       modalTitleColor: "#ffffff",
       modalDescColor: "rgba(255,255,255,0.72)"
     };
 
     this.projects = [];
 
-    this.filters = [
-      "All",
-      "Website Design",
-      "3D Rendering",
-      "Brand Activation",
-      "Expo Stand",
-      "Set Design"
-    ];
+    this.filters = ["All"];
 
     this.activeFilter = "All";
     this.activeProject = null;
@@ -113,10 +111,10 @@ class ProFilterGallery extends HTMLElement {
 
   attributeChangedCallback(name, oldValue, newValue) {
     if (name === "instance" && newValue && newValue !== oldValue) {
-  this.loadCMSData();
-  return;
-}
-     
+      this.loadCMSData();
+      return;
+    }
+
     if (oldValue === newValue) return;
 
     switch (name.toLowerCase()) {
@@ -281,14 +279,82 @@ class ProFilterGallery extends HTMLElement {
     if (this._resizeObserver) this._resizeObserver.disconnect();
   }
 
+  applySettings(payload = {}) {
+   if (payload.design) {
+  const design = payload.design;
+
+  if (design.accentColor) {
+    this.config.accent = design.accentColor;
+    this.config.pillActiveBg = design.accentColor;
+    this.config.categoryColor = design.accentColor;
+  }
+
+  if (typeof design.columns !== "undefined") {
+    this.config.columns = Math.max(1, Number(design.columns) || this.config.columns);
+  }
+
+  if (typeof design.cardGap !== "undefined") {
+    this.config.gap = Number(design.cardGap) || this.config.gap;
+  }
+
+  if (typeof design.cardRadius !== "undefined") {
+    this.config.radius = Number(design.cardRadius) || this.config.radius;
+    this.config.imageRadius = this.config.radius;
+  }
+
+if (typeof design.cardBackground !== "undefined") {
+  this.config.cardPanelBg = design.cardBackground || this.config.cardPanelBg;
+}
+
+if (typeof design.textPanelStyle !== "undefined") {
+  this.config.textPanelStyle = design.textPanelStyle || "fade";
+}
+
+if (typeof design.overlayStrength !== "undefined") {
+  this.config.overlayStrength = Number(design.overlayStrength) || 72;
+}
+
+  if (typeof design.showCategory !== "undefined") {
+    this.config.showCategory = !!design.showCategory;
+  }
+
+  if (typeof design.showFilters !== "undefined") {
+    this.config.showFilters = !!design.showFilters;
+  }
+
+  if (typeof design.enableModal !== "undefined") {
+    this.config.enableModal = !!design.enableModal;
+  }
+
+  if (typeof design.modalImageFit !== "undefined") {
+  this.config.modalImageFit = design.modalImageFit || "cover";
+}
+
+  if (typeof design.titleSize !== "undefined") {
+    this.config.titleSize = this.mapSizeToPreset(Number(design.titleSize));
+  }
+
+  if (typeof design.metaSize !== "undefined") {
+    this.config.descSize = this.mapSizeToPreset(Number(design.metaSize));
+    this.config.categorySize = Number(design.metaSize) <= 10 ? "small" : "medium";
+  }
+}
+
+    if (Array.isArray(payload.projects)) {
+      this.setProjects(payload.projects);
+      return;
+    }
+
+    this.render();
+    this.renderCards();
+  }
+
   bindWixData() {
     if (this._wixDataBound) return;
     this._wixDataBound = true;
 
     window.addEventListener("message", (event) => {
       if (event?.data?.type === "WIX_DATA" && Array.isArray(event.data.items)) {
-        console.log("🔥 Wix CMS Data Received:", event.data.items);
-
         const projects = event.data.items.map((item, index) => ({
           id: item._id || `project-${index + 1}`,
           title: item.title || "Untitled Project",
@@ -296,10 +362,10 @@ class ProFilterGallery extends HTMLElement {
           description: item.description || "",
           coverImage: this.normalizeImage(item.coverImage),
           images: Array.isArray(item.images)
-  ? item.images.map((img) => this.normalizeImage(img)).filter(Boolean)
-  : item.images
-    ? [this.normalizeImage(item.images)].filter(Boolean)
-    : [],
+            ? item.images.map((img) => this.normalizeImage(img)).filter(Boolean)
+            : item.images
+              ? [this.normalizeImage(item.images)].filter(Boolean)
+              : [],
           order: item.order || index + 1,
           visible: item.visible !== false
         }));
@@ -316,6 +382,11 @@ class ProFilterGallery extends HTMLElement {
     window.addEventListener("message", (event) => {
       if (event?.data?.type === "WIX_PORTFOLIO_DATA" && Array.isArray(event.data.projects)) {
         this.setProjects(event.data.projects);
+        return;
+      }
+
+      if (event?.data?.type === "PRO_FILTER_GALLERY_SETTINGS_UPDATED" && event.data.payload) {
+        this.applySettings(event.data.payload);
       }
     });
   }
@@ -351,6 +422,12 @@ class ProFilterGallery extends HTMLElement {
     const n = parseFloat(cleaned);
     return Number.isFinite(n) ? n : fallback;
   }
+
+  mapSizeToPreset(value) {
+  if (value <= 15) return "small";
+  if (value >= 18) return "large";
+  return "medium";
+}
 
   normalizeFontFamily(value) {
     const v = (value || "").trim();
@@ -395,6 +472,8 @@ class ProFilterGallery extends HTMLElement {
         let images = [];
         if (Array.isArray(project.images) && project.images.length) {
           images = project.images.map((img) => this.normalizeImage(img)).filter(Boolean);
+        } else if (Array.isArray(project.galleryImages) && project.galleryImages.length) {
+          images = project.galleryImages.map((img) => this.normalizeImage(img)).filter(Boolean);
         }
 
         if (!images.length && coverImage) {
@@ -402,19 +481,35 @@ class ProFilterGallery extends HTMLElement {
         }
 
         return {
-          id: project.id ?? `project-${index + 1}`,
-          title: project.title || "Untitled Project",
-          category: project.category || "Uncategorized",
-          description: project.description || "",
-          coverImage,
-          images,
-          order: typeof project.order === "number" ? project.order : index + 1,
-          visible: project.visible !== false
-        };
+  id: project.id ?? `project-${index + 1}`,
+  title: project.title || "Untitled Project",
+  category: project.category || "Uncategorized",
+  description: project.description || "",
+  coverImage,
+  images,
+  modalImageFit: project.modalImageFit || "",
+  order: typeof project.order === "number" ? project.order : index + 1,
+  visible: project.visible !== false
+};
       });
     }
 
+    this.filters = [
+      "All",
+      ...new Set(
+        this.projects
+          .filter((project) => project.visible !== false)
+          .map((project) => project.category)
+          .filter(Boolean)
+      )
+    ];
+
+    if (!this.filters.includes(this.activeFilter)) {
+      this.activeFilter = "All";
+    }
+
     if (this.isConnected) {
+      this.render();
       this.renderCards();
       if (this._sendHeight) this._sendHeight();
     }
@@ -457,48 +552,48 @@ class ProFilterGallery extends HTMLElement {
   }
 
   getTitleSizePx() {
-    switch (this.config.titleSize) {
-      case "small":
-        return 14;
-      case "large":
-        return 18;
-      default:
-        return 16;
-    }
+  switch (this.config.titleSize) {
+    case "small":
+      return 13;
+    case "large":
+      return 22;
+    default:
+      return 17;
   }
+}
 
   getMobileTitleSizePx() {
-    switch (this.config.titleSize) {
-      case "small":
-        return 14;
-      case "large":
-        return 17;
-      default:
-        return 16;
-    }
+  switch (this.config.titleSize) {
+    case "small":
+      return 13;
+    case "large":
+      return 20;
+    default:
+      return 16;
   }
+}
 
   getDescSizePx() {
-    switch (this.config.descSize) {
-      case "small":
-        return 12;
-      case "large":
-        return 14;
-      default:
-        return 12.5;
-    }
+  switch (this.config.descSize) {
+    case "small":
+      return 11;
+    case "large":
+      return 15;
+    default:
+      return 13;
   }
+}
 
   getMobileDescSizePx() {
-    switch (this.config.descSize) {
-      case "small":
-        return 12;
-      case "large":
-        return 14;
-      default:
-        return 13;
-    }
+  switch (this.config.descSize) {
+    case "small":
+      return 11;
+    case "large":
+      return 14;
+    default:
+      return 12.5;
   }
+}
 
   getCategorySizePx() {
     switch (this.config.categorySize) {
@@ -579,72 +674,69 @@ class ProFilterGallery extends HTMLElement {
   }
 
   async loadCMSData() {
-  try {
-    // 🔥 Get Wix instance (contains site info + auth)
-    const instance = this.getAttribute("instance");
+    try {
+      const instance = this.getAttribute("instance");
 
-if (!instance) {
-  console.warn("No instance yet — waiting...");
-  return;
-}
+      if (!instance) {
+        console.warn("No instance yet — waiting...");
+        return;
+      }
 
-    // 🔥 YOUR COLLECTION ID (already correct)
-    const collectionId = "@ardoproductions/profiltergallery/portfolio-projects";
+      const collectionId = "@ardoproductions/profiltergallery/portfolio-projects";
 
-    // 🔥 Wix Data REST endpoint
-    const response = await fetch(`https://www.wixapis.com/wix-data/v2/items/query`, {
-  method: "POST",
-  headers: {
-    "Content-Type": "application/json",
-    "Authorization": instance
-  },
-  body: JSON.stringify({
-    dataCollectionId: collectionId,
-    query: {
-      sort: [{ fieldName: "order", order: "ASC" }]
+      const response = await fetch(`https://www.wixapis.com/wix-data/v2/items/query`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": instance
+        },
+        body: JSON.stringify({
+          dataCollectionId: collectionId,
+          query: {
+            sort: [{ fieldName: "order", order: "ASC" }]
+          }
+        })
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("CMS RESPONSE ERROR:", response.status, errorText);
+        return;
+      }
+
+      const data = await response.json();
+
+      if (!data?.dataItems?.length) {
+        console.warn("No CMS items found");
+        return;
+      }
+
+      const projects = data.dataItems.map((item, index) => {
+        const f = item.data || {};
+
+        return {
+          id: item._id || `project-${index + 1}`,
+          title: f.title || "Untitled Project",
+          category: f.category || "Uncategorized",
+          coverImage: this.normalizeImage(f.coverImage),
+          description: f.description || "",
+          images: Array.isArray(f.images)
+            ? f.images.map((img) => this.normalizeImage(img)).filter(Boolean)
+            : f.images
+              ? [this.normalizeImage(f.images)].filter(Boolean)
+              : [],
+          order: typeof f.order === "number" ? f.order : index + 1,
+          visible: f.visible !== false
+        };
+      });
+
+      this.setProjects(projects);
+
+    } catch (err) {
+      console.error("CMS LOAD FAILED:", err);
     }
-  })
-});
-
-if (!response.ok) {
-  const errorText = await response.text();
-  console.error("CMS RESPONSE ERROR:", response.status, errorText);
-  return;
-}
-
-const data = await response.json();
-
-    if (!data?.dataItems?.length) {
-      console.warn("No CMS items found");
-      return;
-    }
-
-    const projects = data.dataItems.map((item, index) => {
-      const f = item.data || {};
-
-      return {
-        id: item._id || `project-${index + 1}`,
-        title: f.title || "Untitled Project",
-        category: f.category || "Uncategorized",
-        coverImage: this.normalizeImage(f.coverImage),
-        description: f.description || "",
-images: Array.isArray(f.images)
-  ? f.images.map((img) => this.normalizeImage(img)).filter(Boolean)
-  : f.images
-    ? [this.normalizeImage(f.images)].filter(Boolean)
-    : [],
-        order: typeof f.order === "number" ? f.order : index + 1,
-        visible: f.visible !== false
-      };
-    });
-
-    this.setProjects(projects);
-
-  } catch (err) {
-    console.error("CMS LOAD FAILED:", err);
   }
-}
-  
+
   getStyles() {
     return `
       <style>
@@ -673,7 +765,7 @@ images: Array.isArray(f.images)
         }
 
         .pfg-toolbar {
-          display: flex;
+          display: ${this.config.showFilters ? "flex" : "none"};
           justify-content: center;
           margin-bottom: 28px;
           overflow-x: auto;
@@ -738,7 +830,7 @@ images: Array.isArray(f.images)
           overflow: hidden;
           transition: transform 0.28s ease, border-color 0.28s ease, box-shadow 0.28s ease;
           box-shadow: ${this.getCardShadow()};
-          cursor: pointer;
+          cursor: ${this.config.enableModal ? "pointer" : "default"};
         }
 
         .pfg-card:hover {
@@ -755,20 +847,34 @@ images: Array.isArray(f.images)
           background: #0f1014;
         }
 
-        .pfg-image-wrap::after {
-          content: "";
-          position: absolute;
-          inset: auto 0 0 0;
-          height: 42%;
-          background: linear-gradient(
-            to bottom,
-            rgba(16,17,23,0) 0%,
-            rgba(16,17,23,0.18) 42%,
-            rgba(16,17,23,0.88) 100%
-          );
-          pointer-events: none;
-          z-index: 1;
-        }
+  .pfg-image-wrap::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 42%;
+  background: ${
+    this.config.textPanelStyle === "fade"
+      ? `linear-gradient(
+          to bottom,
+          rgba(16,17,23,0) 0%,
+          rgba(16,17,23,${Math.max(0.08, (this.config.overlayStrength || 72) / 400)}) 42%,
+          rgba(16,17,23,${Math.max(0.3, (this.config.overlayStrength || 72) / 100)}) 100%
+        )`
+      : "none"
+  };
+  pointer-events: none;
+  z-index: 1;
+}
+
+.pfg-image-wrap.is-empty::after {
+  display: none;
+}
+
+.pfg-image-empty {
+  width: 100%;
+  height: 100%;
+  background: transparent;
+}
 
         .pfg-image {
           width: 100%;
@@ -784,13 +890,17 @@ images: Array.isArray(f.images)
         }
 
         .pfg-card-body {
-          position: relative;
-          flex: 1 1 auto;
-          min-height: 0;
-          background: ${this.config.cardPanelBg};
-          padding: 16px 16px 14px;
-          border-top: 1px solid rgba(255,255,255,0.06);
-        }
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  background: ${
+    this.config.textPanelStyle === "solid"
+      ? `rgba(${this.hexToRgb(this.config.cardPanelBg)}, ${Math.max(0.25, Math.min(1, (this.config.overlayStrength || 72) / 100))})`
+      : "transparent"
+  };
+  padding: 16px 16px 14px;
+  border-top: none;
+}
 
         .pfg-content {
           display: flex;
@@ -1094,14 +1204,14 @@ images: Array.isArray(f.images)
         }
 
         .pfg-modal-image {
-          width: 100%;
-          height: min(42vh, 460px);
-          object-fit: ${this.config.imageFit};
-          display: block;
-          border-radius: ${this.config.imageRadius}px;
-          margin-top: 12px;
-          background: #111217;
-        }
+  width: 100%;
+  height: min(42vh, 460px);
+  object-fit: ${this.config.modalImageFit || "cover"};
+  display: block;
+  border-radius: ${this.config.imageRadius}px;
+  margin-top: 12px;
+  background: #111217;
+}
 
         .pfg-modal-content {
           padding: 18px 4px 6px;
@@ -1155,7 +1265,7 @@ images: Array.isArray(f.images)
           border-radius: 14px;
           object-fit: cover;
           flex: 0 0 auto;
-          border: 2px solid transparent;
+          border: 0.5px solid transparent;
           cursor: pointer;
           opacity: 0.72;
           transition: opacity 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
@@ -1409,11 +1519,11 @@ images: Array.isArray(f.images)
           }
 
           .pfg-modal-image {
-            height: min(34vh, 320px);
-            border-radius: ${this.config.imageRadius}px;
-            margin-top: 8px;
-            object-fit: ${this.config.imageFit};
-          }
+  height: min(34vh, 320px);
+  border-radius: ${this.config.imageRadius}px;
+  margin-top: 8px;
+  object-fit: ${this.config.modalImageFit || "cover"};
+}
 
           .pfg-modal-content {
             padding: 16px 2px 8px;
@@ -1509,7 +1619,7 @@ images: Array.isArray(f.images)
         return;
       }
 
-      if (card) {
+      if (card && this.config.enableModal) {
         const id = card.dataset.id;
         const project = this.projects.find((p) => String(p.id) === String(id));
         if (project) this.openModal(project);
@@ -1543,7 +1653,9 @@ images: Array.isArray(f.images)
     const visibleProjects = this.projects
       .filter((project) => project.visible !== false)
       .filter((project) =>
-        this.activeFilter === "All" ? true : project.category === this.activeFilter
+        this.activeFilter === "All"
+          ? true
+          : String(project.category || "").toLowerCase() === String(this.activeFilter).toLowerCase()
       )
       .sort((a, b) => {
         const ao = typeof a.order === "number" ? a.order : 0;
@@ -1598,9 +1710,12 @@ images: Array.isArray(f.images)
 
     grid.innerHTML = visibleProjects.map((project) => `
       <article class="pfg-card" data-id="${this.escapeHtml(String(project.id))}">
-        <div class="pfg-image-wrap">
-          <img class="pfg-image" src="${this.escapeHtml(project.coverImage)}" alt="${this.escapeHtml(project.title)}">
-        </div>
+        <div class="pfg-image-wrap ${project.coverImage ? "" : "is-empty"}">
+  ${project.coverImage
+    ? `<img class="pfg-image" src="${this.escapeHtml(project.coverImage)}" alt="${this.escapeHtml(project.title)}">`
+    : `<div class="pfg-image-empty"></div>`
+  }
+</div>
         <div class="pfg-card-body">
           <div class="pfg-content">
             ${this.config.showCategory
@@ -1649,6 +1764,9 @@ images: Array.isArray(f.images)
 
     mainImage.src = currentImage;
     mainImage.alt = project.title;
+
+    const modalFit = project.modalImageFit || this.config.modalImageFit || "cover";
+mainImage.style.objectFit = modalFit;
 
     modalCategory.textContent = project.category;
     modalTitle.textContent = project.title;
