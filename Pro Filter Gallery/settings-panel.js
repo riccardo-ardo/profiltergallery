@@ -67,8 +67,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
 async function init() {
   loadState();
-  await loadStateFromWixProps();
   ensureSelectedProject();
+
+  await bootstrapWixState();
+
   wireNavigation();
   wireActions();
   wireEditorFields();
@@ -153,24 +155,50 @@ function wireResponsivePreview() {
     }
   }
 
+  async function bootstrapWixState() {
+  if (!window.Wix || typeof Wix.getProp !== "function" || typeof Wix.setProp !== "function") {
+    return;
+  }
+
+  try {
+    const existingProjects = await Wix.getProp("projects");
+
+    // If Wix already has saved projects, do nothing.
+    if (existingProjects && String(existingProjects).trim() !== "") {
+      return;
+    }
+
+    // First-time setup: push current default state into Wix
+    await syncStateToWix();
+  } catch (error) {
+    console.warn("Could not bootstrap Wix state", error);
+  }
+}
+  
 async function saveState() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
 
   await syncStateToWix();
+
+  // keep this while testing if you want
+  window.parent.postMessage({
+    type: "PRO_FILTER_GALLERY_SETTINGS_UPDATED",
+    payload: JSON.parse(JSON.stringify(state))
+  }, "*");
 }
-  async function syncStateToWix() {
+ async function syncStateToWix() {
   if (!window.Wix || typeof Wix.setProp !== "function") return;
 
   try {
-    // full projects payload as JSON string
     await Wix.setProp("projects", JSON.stringify(state.projects));
 
-    // design props
     await Wix.setProp("accent", String(state.design.accentColor || "#7c9cff"));
     await Wix.setProp("columns", String(state.design.columns ?? 3));
     await Wix.setProp("gap", String(state.design.cardGap ?? 16));
     await Wix.setProp("radius", String(state.design.cardRadius ?? 20));
     await Wix.setProp("cardpanelbg", String(state.design.cardBackground || "#111722"));
+    await Wix.setProp("textpanelstyle", String(state.design.textPanelStyle || "fade"));
+    await Wix.setProp("overlaystrength", String(state.design.overlayStrength ?? 72));
     await Wix.setProp("showcategory", String(!!state.design.showCategory));
     await Wix.setProp("showfilters", String(!!state.design.showFilters));
     await Wix.setProp("enablemodal", String(!!state.design.enableModal));
@@ -179,8 +207,7 @@ async function saveState() {
     await Wix.setProp("categorysize", Number(state.design.metaSize) <= 10 ? "small" : "medium");
     await Wix.setProp("modalimagefit", String(state.design.modalImageFit || "cover"));
   } catch (error) {
-    console.warn("Could not sync props to Wix", error);
-    await Wix.setProp("textpanelstyle", String(state.design.textPanelStyle || "fade"));
+    console.warn("Could not sync state to Wix", error);
   }
 }
 
