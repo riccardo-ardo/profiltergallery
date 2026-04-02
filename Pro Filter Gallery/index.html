@@ -5,10 +5,7 @@
   <title>Portfolio Gallery</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-  <!-- Wix SDK -->
   <script src="https://static.parastorage.com/services/js-sdk/1.388.0/app-sdk.js"></script>
-
-  <!-- Your widget -->
   <script src="./pro-filter-gallery.js" defer></script>
 
   <style>
@@ -32,12 +29,10 @@
   </style>
 </head>
 <body>
-
   <pro-filter-gallery></pro-filter-gallery>
 
   <script>
     document.addEventListener("DOMContentLoaded", async function () {
-
       const gallery = document.querySelector("pro-filter-gallery");
 
       async function hydrateFromWixProps() {
@@ -60,7 +55,12 @@
           const categorysize = await Wix.getProp("categorysize");
           const modalimagefit = await Wix.getProp("modalimagefit");
 
-          if (projects) gallery.setAttribute("projects", projects);
+          if (projects !== null && projects !== undefined && projects !== "") {
+            gallery.setAttribute("projects", projects);
+          } else {
+            gallery.setAttribute("projects", "[]");
+          }
+
           if (accent) gallery.setAttribute("accent", accent);
           if (columns) gallery.setAttribute("columns", columns);
           if (gap) gallery.setAttribute("gap", gap);
@@ -75,25 +75,21 @@
           if (descsize) gallery.setAttribute("descsize", descsize);
           if (categorysize) gallery.setAttribute("categorysize", categorysize);
           if (modalimagefit) gallery.setAttribute("modalimagefit", modalimagefit);
-
         } catch (e) {
           console.warn("Could not hydrate widget from Wix props", e);
+          gallery.setAttribute("projects", "[]");
         }
       }
 
       if (window.Wix && Wix.addEventListener) {
-
-        // 🔥 CRITICAL: Always rehydrate full state
-        Wix.addEventListener(Wix.Events.SETTINGS_UPDATED, async () => {
+        Wix.addEventListener(Wix.Events.SETTINGS_UPDATED, async function () {
           await hydrateFromWixProps();
         });
 
-        // Wix lifecycle
         try {
           Wix.reportAppLoaded();
         } catch (e) {}
 
-        // Auto height
         function reportHeight() {
           try {
             Wix.setHeight(document.body.scrollHeight);
@@ -104,12 +100,11 @@
         const observer = new ResizeObserver(reportHeight);
         observer.observe(document.body);
 
-        // 🔥 Initial load
         await hydrateFromWixProps();
+      } else {
+        gallery.setAttribute("projects", "[]");
       }
-
     });
   </script>
-
 </body>
 </html>
