@@ -100,14 +100,15 @@ class ProFilterGallery extends HTMLElement {
       "pillborder",
       "pilltext",
       "cardpanelbg",
-      "titlecolor",
-      "desccolor",
-      "categorycolor",
-      "modalbg",
-      "modalimagefit",
-      "modaltitlecolor",
-      "textpanelstyle",
-      "modaldesccolor"
+"textpanelstyle",
+"overlaystrength",
+"titlecolor",
+"desccolor",
+"categorycolor",
+"modalbg",
+"modalimagefit",
+"modaltitlecolor",
+"modaldesccolor"
     ];
   }
 
@@ -247,7 +248,7 @@ class ProFilterGallery extends HTMLElement {
         this.config.categoryColor = newValue || "#4d8dff";
         break;
 
-          case "modalbg":
+      case "modalbg":
         this.config.modalBg = newValue || "#090a0e";
         break;
 
@@ -255,22 +256,22 @@ class ProFilterGallery extends HTMLElement {
         this.config.modalImageFit = newValue === "contain" ? "contain" : "cover";
         break;
 
+      case "modaltitlecolor":
+        this.config.modalTitleColor = newValue || "#ffffff";
+        break;
+
       case "textpanelstyle":
         this.config.textPanelStyle = newValue === "solid" ? "solid" : "fade";
         break;
 
-      case "modaltitlecolor":
-        this.config.modalTitleColor = newValue || "#ffffff";
+      case "overlaystrength":
+        this.config.overlayStrength = this.parseIntValue(newValue, 72);
         break;
 
       case "modaldesccolor":
         this.config.modalDescColor = newValue || "rgba(255,255,255,0.72)";
         break;
     }
-
-    case "textpanelstyle":
-  this.config.textPanelStyle = newValue === "solid" ? "solid" : "fade";
-  break;
 
     if (this.isConnected) {
       this.render();
