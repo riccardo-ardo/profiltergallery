@@ -60,14 +60,14 @@ document.addEventListener("DOMContentLoaded", () => {
   let selectedProjectId = null;
   let activeView = "hub";
   let saveTimeout = null;
+  let isBootstrapping = false;
 
   init();
 
   async function init() {
+    await bootstrapWixState();
     await loadStateFromWixProps();
     ensureSelectedProject();
-
-    await bootstrapWixState();
 
     wireNavigation();
     wireActions();
@@ -80,30 +80,52 @@ document.addEventListener("DOMContentLoaded", () => {
     if (window.Wix && Wix.addEventListener) {
       Wix.addEventListener(Wix.Events.SETTINGS_UPDATED, async () => {
         await loadStateFromWixProps();
+        ensureSelectedProject();
         renderAll();
       });
     }
   }
 
   async function loadStateFromWixProps() {
-    if (!window.Wix || typeof Wix.getProp !== "function") return;
+    if (!window.Wix || typeof Wix.getProp !== "function") {
+      state = structuredClone(DEFAULT_STATE);
+      return;
+    }
 
     try {
-      const projectsProp = await Wix.getProp("projects");
-      const accent = await Wix.getProp("accent");
-      const columns = await Wix.getProp("columns");
-      const gap = await Wix.getProp("gap");
-      const radius = await Wix.getProp("radius");
-      const cardpanelbg = await Wix.getProp("cardpanelbg");
-      const showcategory = await Wix.getProp("showcategory");
-      const showfilters = await Wix.getProp("showfilters");
-      const enablemodal = await Wix.getProp("enablemodal");
-      const titlesize = await Wix.getProp("titlesize");
-      const descsize = await Wix.getProp("descsize");
-      const categorysize = await Wix.getProp("categorysize");
-      const modalimagefit = await Wix.getProp("modalimagefit");
-      const textpanelstyle = await Wix.getProp("textpanelstyle");
-      const overlaystrength = await Wix.getProp("overlaystrength");
+      const [
+        projectsProp,
+        accent,
+        columns,
+        gap,
+        radius,
+        cardpanelbg,
+        showcategory,
+        showfilters,
+        enablemodal,
+        titlesize,
+        descsize,
+        categorysize,
+        modalimagefit,
+        textpanelstyle,
+        overlaystrength
+      ] = await Promise.all([
+        Wix.getProp("projects"),
+        Wix.getProp("accent"),
+        Wix.getProp("columns"),
+        Wix.getProp("gap"),
+        Wix.getProp("radius"),
+        Wix.getProp("cardpanelbg"),
+        Wix.getProp("showcategory"),
+        Wix.getProp("showfilters"),
+        Wix.getProp("enablemodal"),
+        Wix.getProp("titlesize"),
+        Wix.getProp("descsize"),
+        Wix.getProp("categorysize"),
+        Wix.getProp("modalimagefit"),
+        Wix.getProp("textpanelstyle"),
+        Wix.getProp("overlaystrength")
+      ]);
 
       state = structuredClone(DEFAULT_STATE);
 
@@ -119,18 +141,24 @@ document.addEventListener("DOMContentLoaded", () => {
       }
 
       if (accent) state.design.accentColor = accent;
-      if (columns) state.design.columns = Number(columns);
-      if (gap) state.design.cardGap = Number(gap);
-      if (radius) state.design.cardRadius = Number(radius);
+      if (columns) state.design.columns = Number(columns) || DEFAULT_DESIGN.columns;
+      if (gap) state.design.cardGap = Number(gap) || DEFAULT_DESIGN.cardGap;
+      if (radius) state.design.cardRadius = Number(radius) || DEFAULT_DESIGN.cardRadius;
       if (cardpanelbg) state.design.cardBackground = cardpanelbg;
       if (typeof showcategory === "string") state.design.showCategory = showcategory === "true";
       if (typeof showfilters === "string") state.design.showFilters = showfilters === "true";
       if (typeof enablemodal === "string") state.design.enableModal = enablemodal === "true";
       if (titlesize) state.design.titleSize = mapPresetToSliderValue(titlesize);
-      if (descsize) state.design.metaSize = mapPresetToSliderValue(descsize);
+      if (descsize) {
+        state.design.metaSize = mapPresetToSliderValue(descsize);
+      } else if (categorysize === "small") {
+        state.design.metaSize = 10;
+      } else if (categorysize === "medium") {
+        state.design.metaSize = 12;
+      }
       if (modalimagefit) state.design.modalImageFit = modalimagefit;
       if (textpanelstyle) state.design.textPanelStyle = textpanelstyle;
-      if (overlaystrength) state.design.overlayStrength = Number(overlaystrength);
+      if (overlaystrength) state.design.overlayStrength = Number(overlaystrength) || DEFAULT_DESIGN.overlayStrength;
     } catch (error) {
       console.warn("Could not load Wix props into settings panel", error);
       state = structuredClone(DEFAULT_STATE);
@@ -150,47 +178,70 @@ document.addEventListener("DOMContentLoaded", () => {
 
   async function bootstrapWixState() {
     if (!window.Wix || typeof Wix.getProp !== "function") return;
+    if (isBootstrapping) return;
+
+    isBootstrapping = true;
 
     try {
       const existingProjects = await Wix.getProp("projects");
 
       if (!existingProjects) {
-        await syncStateToWix();
+        await syncStateToWix(structuredClone(DEFAULT_STATE), { silent: true });
       }
     } catch (e) {
       console.warn("Bootstrap Wix state failed", e);
+    } finally {
+      isBootstrapping = false;
     }
   }
 
   function saveState() {
     clearTimeout(saveTimeout);
-    saveTimeout = setTimeout(() => {
-      syncStateToWix();
+    saveTimeout = setTimeout(async () => {
+      try {
+        await syncStateToWix(state);
+      } catch (error) {
+        console.warn("Debounced Wix sync failed", error);
+      }
     }, 300);
   }
 
-  async function syncStateToWix() {
-    if (!window.Wix || typeof Wix.setProp !== "function") return;
+  async function syncStateToWix(sourceState = state, options = {}) {
+    if (!window.Wix || typeof Wix.setProp !== "function") return false;
+
+    const { silent = false } = options;
+    const projectsJson = JSON.stringify(sourceState.projects);
+
+    if (projectsJson.length > 40000) {
+      console.warn("Projects data too large for Wix props.");
+      if (!silent) showToast("Projects are too large to save. Use image URLs only.");
+      return false;
+    }
 
     try {
-      await Wix.setProp("projects", JSON.stringify(state.projects));
+      await Promise.all([
+        Wix.setProp("projects", projectsJson),
+        Wix.setProp("accent", String(sourceState.design.accentColor || "#7c9cff")),
+        Wix.setProp("columns", String(sourceState.design.columns ?? 3)),
+        Wix.setProp("gap", String(sourceState.design.cardGap ?? 16)),
+        Wix.setProp("radius", String(sourceState.design.cardRadius ?? 20)),
+        Wix.setProp("cardpanelbg", String(sourceState.design.cardBackground || "#111722")),
+        Wix.setProp("textpanelstyle", String(sourceState.design.textPanelStyle || "fade")),
+        Wix.setProp("overlaystrength", String(sourceState.design.overlayStrength ?? 72)),
+        Wix.setProp("showcategory", String(!!sourceState.design.showCategory)),
+        Wix.setProp("showfilters", String(!!sourceState.design.showFilters)),
+        Wix.setProp("enablemodal", String(!!sourceState.design.enableModal)),
+        Wix.setProp("titlesize", mapSliderToSizePreset(sourceState.design.titleSize)),
+        Wix.setProp("descsize", mapSliderToSizePreset(sourceState.design.metaSize)),
+        Wix.setProp("categorysize", Number(sourceState.design.metaSize) <= 10 ? "small" : "medium"),
+        Wix.setProp("modalimagefit", String(sourceState.design.modalImageFit || "cover"))
+      ]);
 
-      await Wix.setProp("accent", String(state.design.accentColor || "#7c9cff"));
-      await Wix.setProp("columns", String(state.design.columns ?? 3));
-      await Wix.setProp("gap", String(state.design.cardGap ?? 16));
-      await Wix.setProp("radius", String(state.design.cardRadius ?? 20));
-      await Wix.setProp("cardpanelbg", String(state.design.cardBackground || "#111722"));
-      await Wix.setProp("textpanelstyle", String(state.design.textPanelStyle || "fade"));
-      await Wix.setProp("overlaystrength", String(state.design.overlayStrength ?? 72));
-      await Wix.setProp("showcategory", String(!!state.design.showCategory));
-      await Wix.setProp("showfilters", String(!!state.design.showFilters));
-      await Wix.setProp("enablemodal", String(!!state.design.enableModal));
-      await Wix.setProp("titlesize", mapSliderToSizePreset(state.design.titleSize));
-      await Wix.setProp("descsize", mapSliderToSizePreset(state.design.metaSize));
-      await Wix.setProp("categorysize", Number(state.design.metaSize) <= 10 ? "small" : "medium");
-      await Wix.setProp("modalimagefit", String(state.design.modalImageFit || "cover"));
+      return true;
     } catch (error) {
       console.warn("Could not sync state to Wix", error);
+      if (!silent) showToast("Could not save settings to Wix.");
+      return false;
     }
   }
 
