@@ -104,7 +104,9 @@ class ProFilterGallery extends HTMLElement {
       "desccolor",
       "categorycolor",
       "modalbg",
+      "modalimagefit",
       "modaltitlecolor",
+      "textpanelstyle",
       "modaldesccolor"
     ];
   }
@@ -249,6 +251,10 @@ class ProFilterGallery extends HTMLElement {
         this.config.modalBg = newValue || "#090a0e";
         break;
 
+        case "modalimagefit":
+  this.config.modalImageFit = newValue === "contain" ? "contain" : "cover";
+  break;
+        
       case "modaltitlecolor":
         this.config.modalTitleColor = newValue || "#ffffff";
         break;
@@ -257,6 +263,10 @@ class ProFilterGallery extends HTMLElement {
         this.config.modalDescColor = newValue || "rgba(255,255,255,0.72)";
         break;
     }
+
+    case "textpanelstyle":
+  this.config.textPanelStyle = newValue === "solid" ? "solid" : "fade";
+  break;
 
     if (this.isConnected) {
       this.render();
