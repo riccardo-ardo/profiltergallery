@@ -69,6 +69,7 @@ async function init() {
   loadState();
   await loadStateFromWixProps();
   ensureSelectedProject();
+
   await bootstrapWixState();
 
   wireNavigation();
