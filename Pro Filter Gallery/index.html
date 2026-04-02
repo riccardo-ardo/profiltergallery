@@ -34,39 +34,7 @@
 
 <script>
   window.onload = function () {
-    const gallery = document.querySelector("pro-filter-gallery");
-    const STORAGE_KEY = "pro_filter_gallery_settings_v2";
-
-    function applySettingsToGallery(payload) {
-      if (!gallery || !payload) return;
-
-      if (typeof gallery.applySettings === "function") {
-        gallery.applySettings(payload);
-        return;
-      }
-
-      if (payload.projects) {
-        gallery.setAttribute("projects", JSON.stringify(payload.projects));
-      }
-    }
-
-    // 1. Bootstrap from saved settings immediately
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) {
-        const savedState = JSON.parse(raw);
-        applySettingsToGallery(savedState);
-      }
-    } catch (e) {
-      console.warn("Could not read saved widget state", e);
-    }
-
-    // 2. Listen for Wix native settings updates
     if (window.Wix && Wix.addEventListener) {
-      Wix.addEventListener(Wix.Events.SETTINGS_UPDATED, function (message) {
-        applySettingsToGallery(message);
-      });
-
       try {
         Wix.reportAppLoaded();
       } catch (e) {}
@@ -82,24 +50,6 @@
       const observer = new ResizeObserver(reportHeight);
       observer.observe(document.body);
     }
-
-    // 3. Listen for settings panel live updates
-    window.addEventListener("message", function (event) {
-      if (event?.data?.type === "PRO_FILTER_GALLERY_SETTINGS_UPDATED") {
-        applySettingsToGallery(event.data.payload);
-      }
-    });
-
-    window.addEventListener("storage", function (event) {
-  if (event.key === STORAGE_KEY && event.newValue) {
-    try {
-      const savedState = JSON.parse(event.newValue);
-      applySettingsToGallery(savedState);
-    } catch (e) {
-      console.warn("Could not sync widget from storage event", e);
-    }
-  }
-});
   };
 </script>
 </body>
