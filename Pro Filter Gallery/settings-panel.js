@@ -1,23 +1,20 @@
 document.addEventListener("DOMContentLoaded", () => {
-  const STORAGE_KEY = "pro_filter_gallery_settings_v2";
-
   const DEFAULT_DESIGN = {
-  columns: 3,
-  cardGap: 16,
-  cardRadius: 20,
-  cardBackground: "#111722",
-  textPanelStyle: "fade",
-  overlayStrength: 72,
-  showCategory: true,
-  titleSize: 16,
-  metaSize: 12,
-  showFilters: true,
-  accentColor: "#7c9cff",
-  enableModal: true,
-  modalImageFit: "cover",
-  showGalleryCount: true
-  
-};
+    columns: 3,
+    cardGap: 16,
+    cardRadius: 20,
+    cardBackground: "#111722",
+    textPanelStyle: "fade",
+    overlayStrength: 72,
+    showCategory: true,
+    titleSize: 16,
+    metaSize: 12,
+    showFilters: true,
+    accentColor: "#7c9cff",
+    enableModal: true,
+    modalImageFit: "cover",
+    showGalleryCount: true
+  };
 
   const DEFAULT_STATE = {
     design: { ...DEFAULT_DESIGN },
@@ -62,162 +59,140 @@ document.addEventListener("DOMContentLoaded", () => {
   let state = structuredClone(DEFAULT_STATE);
   let selectedProjectId = null;
   let activeView = "hub";
+  let saveTimeout = null;
 
   init();
 
-async function init() {
-  loadState();
-  await loadStateFromWixProps();
-  ensureSelectedProject();
+  async function init() {
+    await loadStateFromWixProps();
+    ensureSelectedProject();
 
-  await bootstrapWixState();
+    await bootstrapWixState();
 
-  wireNavigation();
-  wireActions();
-  wireEditorFields();
-  wireDesignControls();
-  wireResponsivePreview();
-  setView(getInitialView());
-  renderAll();
+    wireNavigation();
+    wireActions();
+    wireEditorFields();
+    wireDesignControls();
+    wireResponsivePreview();
+    setView(getInitialView());
+    renderAll();
 
-  if (window.Wix && Wix.addEventListener) {
-    Wix.addEventListener(Wix.Events.SETTINGS_UPDATED, async () => {
-      await loadStateFromWixProps();
-      renderAll();
-    });
+    if (window.Wix && Wix.addEventListener) {
+      Wix.addEventListener(Wix.Events.SETTINGS_UPDATED, async () => {
+        await loadStateFromWixProps();
+        renderAll();
+      });
+    }
   }
-}
 
   async function loadStateFromWixProps() {
-  if (!window.Wix || typeof Wix.getProp !== "function") return;
+    if (!window.Wix || typeof Wix.getProp !== "function") return;
 
-  try {
-    const projectsProp = await Wix.getProp("projects");
-    const accent = await Wix.getProp("accent");
-    const columns = await Wix.getProp("columns");
-    const gap = await Wix.getProp("gap");
-    const radius = await Wix.getProp("radius");
-    const cardpanelbg = await Wix.getProp("cardpanelbg");
-    const showcategory = await Wix.getProp("showcategory");
-    const showfilters = await Wix.getProp("showfilters");
-    const enablemodal = await Wix.getProp("enablemodal");
-    const titlesize = await Wix.getProp("titlesize");
-    const descsize = await Wix.getProp("descsize");
-    const categorysize = await Wix.getProp("categorysize");
-    const modalimagefit = await Wix.getProp("modalimagefit");
-    const textpanelstyle = await Wix.getProp("textpanelstyle");
-const overlaystrength = await Wix.getProp("overlaystrength");
-
-if (textpanelstyle) state.design.textPanelStyle = textpanelstyle;
-if (overlaystrength) state.design.overlayStrength = Number(overlaystrength);
-
-    if (projectsProp) {
-      try {
-        const parsedProjects = JSON.parse(projectsProp);
-        if (Array.isArray(parsedProjects) && parsedProjects.length) {
-          state.projects = parsedProjects.map(normalizeProject);
-        }
-      } catch (e) {
-        console.warn("Could not parse Wix projects prop", e);
-      }
-    }
-
-    if (accent) state.design.accentColor = accent;
-    if (columns) state.design.columns = Number(columns);
-    if (gap) state.design.cardGap = Number(gap);
-    if (radius) state.design.cardRadius = Number(radius);
-    if (cardpanelbg) state.design.cardBackground = cardpanelbg;
-    if (typeof showcategory === "string") state.design.showCategory = showcategory === "true";
-    if (typeof showfilters === "string") state.design.showFilters = showfilters === "true";
-    if (typeof enablemodal === "string") state.design.enableModal = enablemodal === "true";
-    if (titlesize) state.design.titleSize = mapPresetToSliderValue(titlesize);
-    if (descsize) state.design.metaSize = mapPresetToSliderValue(descsize);
-    if (modalimagefit) state.design.modalImageFit = modalimagefit;
-  } catch (error) {
-    console.warn("Could not load Wix props into settings panel", error);
-  }
-}
-
-function wireResponsivePreview() {
-  let resizeTimer;
-
-  window.addEventListener("resize", () => {
-    clearTimeout(resizeTimer);
-    resizeTimer = setTimeout(() => {
-      renderDesignPreview();
-    }, 120);
-  });
-}
-
-  function loadState() {
     try {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        state = {
-          design: { ...DEFAULT_DESIGN, ...(parsed.design || {}) },
-          projects: Array.isArray(parsed.projects) && parsed.projects.length
-            ? parsed.projects.map(normalizeProject)
-            : structuredClone(DEFAULT_STATE.projects)
-        };
-      } else {
-        state = structuredClone(DEFAULT_STATE);
+      const projectsProp = await Wix.getProp("projects");
+      const accent = await Wix.getProp("accent");
+      const columns = await Wix.getProp("columns");
+      const gap = await Wix.getProp("gap");
+      const radius = await Wix.getProp("radius");
+      const cardpanelbg = await Wix.getProp("cardpanelbg");
+      const showcategory = await Wix.getProp("showcategory");
+      const showfilters = await Wix.getProp("showfilters");
+      const enablemodal = await Wix.getProp("enablemodal");
+      const titlesize = await Wix.getProp("titlesize");
+      const descsize = await Wix.getProp("descsize");
+      const categorysize = await Wix.getProp("categorysize");
+      const modalimagefit = await Wix.getProp("modalimagefit");
+      const textpanelstyle = await Wix.getProp("textpanelstyle");
+      const overlaystrength = await Wix.getProp("overlaystrength");
+
+      state = structuredClone(DEFAULT_STATE);
+
+      if (projectsProp) {
+        try {
+          const parsedProjects = JSON.parse(projectsProp);
+          if (Array.isArray(parsedProjects) && parsedProjects.length) {
+            state.projects = parsedProjects.map(normalizeProject);
+          }
+        } catch (e) {
+          console.warn("Could not parse Wix projects prop", e);
+        }
       }
-    } catch {
+
+      if (accent) state.design.accentColor = accent;
+      if (columns) state.design.columns = Number(columns);
+      if (gap) state.design.cardGap = Number(gap);
+      if (radius) state.design.cardRadius = Number(radius);
+      if (cardpanelbg) state.design.cardBackground = cardpanelbg;
+      if (typeof showcategory === "string") state.design.showCategory = showcategory === "true";
+      if (typeof showfilters === "string") state.design.showFilters = showfilters === "true";
+      if (typeof enablemodal === "string") state.design.enableModal = enablemodal === "true";
+      if (titlesize) state.design.titleSize = mapPresetToSliderValue(titlesize);
+      if (descsize) state.design.metaSize = mapPresetToSliderValue(descsize);
+      if (modalimagefit) state.design.modalImageFit = modalimagefit;
+      if (textpanelstyle) state.design.textPanelStyle = textpanelstyle;
+      if (overlaystrength) state.design.overlayStrength = Number(overlaystrength);
+    } catch (error) {
+      console.warn("Could not load Wix props into settings panel", error);
       state = structuredClone(DEFAULT_STATE);
     }
   }
 
-async function bootstrapWixState() {
-  if (!window.Wix || typeof Wix.getProp !== "function") return;
+  function wireResponsivePreview() {
+    let resizeTimer;
 
-  try {
-    const existingProjects = await Wix.getProp("projects");
+    window.addEventListener("resize", () => {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(() => {
+        renderDesignPreview();
+      }, 120);
+    });
+  }
 
-    // If Wix has no projects yet, push the panel's current state into Wix
-    if (!existingProjects) {
-      await syncStateToWix();
+  async function bootstrapWixState() {
+    if (!window.Wix || typeof Wix.getProp !== "function") return;
+
+    try {
+      const existingProjects = await Wix.getProp("projects");
+
+      if (!existingProjects) {
+        await syncStateToWix();
+      }
+    } catch (e) {
+      console.warn("Bootstrap Wix state failed", e);
     }
-
-  } catch (e) {
-    console.warn("Bootstrap Wix state failed", e);
   }
-}
-async function saveState() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
 
-  await syncStateToWix();
-
-  // keep this while testing if you want
-  window.parent.postMessage({
-    type: "PRO_FILTER_GALLERY_SETTINGS_UPDATED",
-    payload: JSON.parse(JSON.stringify(state))
-  }, "*");
-}
- async function syncStateToWix() {
-  if (!window.Wix || typeof Wix.setProp !== "function") return;
-
-  try {
-    await Wix.setProp("projects", JSON.stringify(state.projects));
-
-    await Wix.setProp("accent", String(state.design.accentColor || "#7c9cff"));
-    await Wix.setProp("columns", String(state.design.columns ?? 3));
-    await Wix.setProp("gap", String(state.design.cardGap ?? 16));
-    await Wix.setProp("radius", String(state.design.cardRadius ?? 20));
-    await Wix.setProp("cardpanelbg", String(state.design.cardBackground || "#111722"));
-    await Wix.setProp("textpanelstyle", String(state.design.textPanelStyle || "fade"));
-    await Wix.setProp("overlaystrength", String(state.design.overlayStrength ?? 72));
-    await Wix.setProp("showcategory", String(!!state.design.showCategory));
-    await Wix.setProp("showfilters", String(!!state.design.showFilters));
-    await Wix.setProp("enablemodal", String(!!state.design.enableModal));
-    await Wix.setProp("titlesize", mapSliderToSizePreset(state.design.titleSize));
-    await Wix.setProp("descsize", mapSliderToSizePreset(state.design.metaSize));
-    await Wix.setProp("categorysize", Number(state.design.metaSize) <= 10 ? "small" : "medium");
-    await Wix.setProp("modalimagefit", String(state.design.modalImageFit || "cover"));
-  } catch (error) {
-    console.warn("Could not sync state to Wix", error);
+  function saveState() {
+    clearTimeout(saveTimeout);
+    saveTimeout = setTimeout(() => {
+      syncStateToWix();
+    }, 300);
   }
-}
+
+  async function syncStateToWix() {
+    if (!window.Wix || typeof Wix.setProp !== "function") return;
+
+    try {
+      await Wix.setProp("projects", JSON.stringify(state.projects));
+
+      await Wix.setProp("accent", String(state.design.accentColor || "#7c9cff"));
+      await Wix.setProp("columns", String(state.design.columns ?? 3));
+      await Wix.setProp("gap", String(state.design.cardGap ?? 16));
+      await Wix.setProp("radius", String(state.design.cardRadius ?? 20));
+      await Wix.setProp("cardpanelbg", String(state.design.cardBackground || "#111722"));
+      await Wix.setProp("textpanelstyle", String(state.design.textPanelStyle || "fade"));
+      await Wix.setProp("overlaystrength", String(state.design.overlayStrength ?? 72));
+      await Wix.setProp("showcategory", String(!!state.design.showCategory));
+      await Wix.setProp("showfilters", String(!!state.design.showFilters));
+      await Wix.setProp("enablemodal", String(!!state.design.enableModal));
+      await Wix.setProp("titlesize", mapSliderToSizePreset(state.design.titleSize));
+      await Wix.setProp("descsize", mapSliderToSizePreset(state.design.metaSize));
+      await Wix.setProp("categorysize", Number(state.design.metaSize) <= 10 ? "small" : "medium");
+      await Wix.setProp("modalimagefit", String(state.design.modalImageFit || "cover"));
+    } catch (error) {
+      console.warn("Could not sync state to Wix", error);
+    }
+  }
 
   function ensureSelectedProject() {
     if (!state.projects.length) {
@@ -249,30 +224,30 @@ async function saveState() {
     });
   }
 
-function setView(view) {
-  activeView = view;
+  function setView(view) {
+    activeView = view;
 
-  document.querySelectorAll(".view").forEach(v => {
-    v.classList.remove("active");
-  });
+    document.querySelectorAll(".view").forEach(v => {
+      v.classList.remove("active");
+    });
 
-  const target = document.getElementById(`view-${view}`);
-  if (target) target.classList.add("active");
+    const target = document.getElementById(`view-${view}`);
+    if (target) target.classList.add("active");
 
-  document.querySelectorAll(".rail-btn").forEach(btn => {
-    btn.classList.remove("active");
-    if (btn.dataset.viewTarget === view) {
-      btn.classList.add("active");
-    }
-  });
+    document.querySelectorAll(".rail-btn").forEach(btn => {
+      btn.classList.remove("active");
+      if (btn.dataset.viewTarget === view) {
+        btn.classList.add("active");
+      }
+    });
 
-  document.querySelectorAll(".mobile-nav-btn").forEach(btn => {
-    btn.classList.remove("active");
-    if (btn.dataset.viewTarget === view) {
-      btn.classList.add("active");
-    }
-  });
-}
+    document.querySelectorAll(".mobile-nav-btn").forEach(btn => {
+      btn.classList.remove("active");
+      if (btn.dataset.viewTarget === view) {
+        btn.classList.add("active");
+      }
+    });
+  }
 
   function wireActions() {
     byId("newProjectBtn")?.addEventListener("click", createProject);
@@ -286,8 +261,13 @@ function setView(view) {
 
     byId("projectSearch")?.addEventListener("input", renderProjects);
 
-    byId("coverUploadBtn")?.addEventListener("click", () => byId("coverImageUpload")?.click());
-    byId("galleryUploadBtn")?.addEventListener("click", () => byId("galleryImageUpload")?.click());
+    byId("coverUploadBtn")?.addEventListener("click", () => {
+      showToast("For marketplace-safe use, please paste an image URL instead of uploading a file.");
+    });
+
+    byId("galleryUploadBtn")?.addEventListener("click", () => {
+      showToast("For marketplace-safe use, please paste image URLs instead of uploading files.");
+    });
 
     byId("coverImageUpload")?.addEventListener("change", handleCoverUpload);
     byId("galleryImageUpload")?.addEventListener("change", handleGalleryUpload);
@@ -298,7 +278,7 @@ function setView(view) {
     byId("csvFileInput")?.addEventListener("change", importCSV);
 
     byId("exportTemplateBtn")?.addEventListener("click", exportCSVTemplate);
-byId("downloadCsvTemplateBtn")?.addEventListener("click", exportCSVTemplate);
+    byId("downloadCsvTemplateBtn")?.addEventListener("click", exportCSVTemplate);
   }
 
   function wireEditorFields() {
@@ -317,11 +297,11 @@ byId("downloadCsvTemplateBtn")?.addEventListener("click", exportCSVTemplate);
     });
 
     byId("projectModalImageFit")?.addEventListener("change", e => {
-  const project = getSelectedProject();
-  if (!project) return;
-  project.modalImageFit = e.target.value;
-  commit();
-});
+      const project = getSelectedProject();
+      if (!project) return;
+      project.modalImageFit = e.target.value;
+      commit();
+    });
 
     byId("projectDescription")?.addEventListener("input", e => {
       const project = getSelectedProject();
@@ -395,15 +375,15 @@ byId("downloadCsvTemplateBtn")?.addEventListener("click", exportCSVTemplate);
 
   function createProject() {
     const project = normalizeProject({
-  id: generateId(),
-  title: `New Project ${state.projects.length + 1}`,
-  category: "Uncategorised",
-  description: "",
-  coverImage: "",
-  galleryImages: [],
-  modalImageFit: "",
-  visible: true
-});
+      id: generateId(),
+      title: `New Project ${state.projects.length + 1}`,
+      category: "Uncategorised",
+      description: "",
+      coverImage: "",
+      galleryImages: [],
+      modalImageFit: "",
+      visible: true
+    });
 
     state.projects.unshift(project);
     selectedProjectId = project.id;
@@ -519,11 +499,11 @@ byId("downloadCsvTemplateBtn")?.addEventListener("click", exportCSVTemplate);
     if (content) content.style.display = "block";
 
     setIfExists("projectTitle", project.title || "");
-setIfExists("projectCategory", project.category || "");
-setIfExists("projectModalImageFit", project.modalImageFit || "");
-setIfExists("projectDescription", project.description || "");
-setCheckedIfExists("projectVisible", !!project.visible);
-setIfExists("coverImageUrl", project.coverImage || "");
+    setIfExists("projectCategory", project.category || "");
+    setIfExists("projectModalImageFit", project.modalImageFit || "");
+    setIfExists("projectDescription", project.description || "");
+    setCheckedIfExists("projectVisible", !!project.visible);
+    setIfExists("coverImageUrl", project.coverImage || "");
 
     renderCoverPreview();
     renderGalleryThumbs();
@@ -596,28 +576,28 @@ setIfExists("coverImageUrl", project.coverImage || "");
 
     previews.innerHTML = "";
 
-state.projects.slice(0, 2).forEach(project => {
-  const card = document.createElement("div");
-  card.className = "snapshot-card";
+    state.projects.slice(0, 2).forEach(project => {
+      const card = document.createElement("div");
+      card.className = "snapshot-card";
 
-  const thumb = document.createElement("div");
-  thumb.className = "thumb";
+      const thumb = document.createElement("div");
+      thumb.className = "thumb";
 
-  if (project.coverImage) {
-    thumb.style.backgroundImage = `url('${project.coverImage}')`;
-  }
+      if (project.coverImage) {
+        thumb.style.backgroundImage = `url('${project.coverImage}')`;
+      }
 
-  const copy = document.createElement("div");
-  copy.className = "copy";
-  copy.innerHTML = `
-    <strong>${escapeHtml(project.title || "Untitled Project")}</strong>
-    <small>${escapeHtml(project.category || "Uncategorised")}</small>
-  `;
+      const copy = document.createElement("div");
+      copy.className = "copy";
+      copy.innerHTML = `
+        <strong>${escapeHtml(project.title || "Untitled Project")}</strong>
+        <small>${escapeHtml(project.category || "Uncategorised")}</small>
+      `;
 
-  card.appendChild(thumb);
-  card.appendChild(copy);
-  previews.appendChild(card);
-});
+      card.appendChild(thumb);
+      card.appendChild(copy);
+      previews.appendChild(card);
+    });
   }
 
   function renderDesignControlsFromState() {
@@ -631,10 +611,10 @@ state.projects.slice(0, 2).forEach(project => {
     setTextIfExists("cardRadiusValue", state.design.cardRadius);
 
     setIfExists("cardBackground", state.design.cardBackground);
-setIfExists("textPanelStyle", state.design.textPanelStyle || "fade");
+    setIfExists("textPanelStyle", state.design.textPanelStyle || "fade");
 
-setIfExists("overlayStrength", state.design.overlayStrength);
-setTextIfExists("overlayStrengthValue", state.design.overlayStrength);
+    setIfExists("overlayStrength", state.design.overlayStrength);
+    setTextIfExists("overlayStrengthValue", state.design.overlayStrength);
 
     setCheckedIfExists("showCategory", state.design.showCategory);
 
@@ -665,16 +645,16 @@ setTextIfExists("overlayStrengthValue", state.design.overlayStrength);
     previewGrid.innerHTML = "";
 
     const isMobile = window.innerWidth <= 640;
-const isTablet = window.innerWidth <= 980;
+    const isTablet = window.innerWidth <= 980;
 
-if (isMobile) {
-  previewGrid.style.gridTemplateColumns = "1fr";
-} else if (isTablet) {
-  previewGrid.style.gridTemplateColumns = "repeat(2, minmax(0, 1fr))";
-} else {
-  previewGrid.style.gridTemplateColumns = `repeat(${state.design.columns}, minmax(0, 1fr))`;
-}
-previewGrid.style.gap = `${state.design.cardGap}px`;
+    if (isMobile) {
+      previewGrid.style.gridTemplateColumns = "1fr";
+    } else if (isTablet) {
+      previewGrid.style.gridTemplateColumns = "repeat(2, minmax(0, 1fr))";
+    } else {
+      previewGrid.style.gridTemplateColumns = `repeat(${state.design.columns}, minmax(0, 1fr))`;
+    }
+    previewGrid.style.gap = `${state.design.cardGap}px`;
 
     if (state.design.showFilters) {
       const allChip = document.createElement("span");
@@ -693,12 +673,12 @@ previewGrid.style.gap = `${state.design.cardGap}px`;
     }
 
     const previewProjects = isMobile
-  ? visibleProjects.slice(0, 3)
-  : isTablet
-    ? visibleProjects.slice(0, 3)
-    : visibleProjects;
+      ? visibleProjects.slice(0, 3)
+      : isTablet
+        ? visibleProjects.slice(0, 3)
+        : visibleProjects;
 
-previewProjects.forEach(project => {
+    previewProjects.forEach(project => {
       const item = document.createElement("article");
       item.className = "gallery-item";
       item.style.borderRadius = `${state.design.cardRadius}px`;
@@ -713,18 +693,16 @@ previewProjects.forEach(project => {
       const overlay = document.createElement("div");
       overlay.className = "gallery-overlay";
       overlay.style.background = state.design.textPanelStyle === "fade"
-  ? `linear-gradient(180deg, transparent 28%, rgba(5,7,11,${state.design.overlayStrength / 100}) 100%)`
-  : "none";
+        ? `linear-gradient(180deg, transparent 28%, rgba(5,7,11,${state.design.overlayStrength / 100}) 100%)`
+        : "none";
 
       const copy = document.createElement("div");
-copy.className = "gallery-copy";
+      copy.className = "gallery-copy";
 
-if (state.design.textPanelStyle === "solid") {
-  copy.style.background = `rgba(16,17,23, ${Math.max(0.25, Math.min(1, state.design.overlayStrength / 100))})`;
-  copy.style.borderTop = "1px solid rgba(255,255,255,0.06)";
-}
-
-       
+      if (state.design.textPanelStyle === "solid") {
+        copy.style.background = `rgba(16,17,23, ${Math.max(0.25, Math.min(1, state.design.overlayStrength / 100))})`;
+        copy.style.borderTop = "1px solid rgba(255,255,255,0.06)";
+      }
 
       const title = document.createElement("strong");
       title.textContent = project.title || "Untitled Project";
@@ -760,39 +738,13 @@ if (state.design.textPanelStyle === "solid") {
   }
 
   function handleCoverUpload(e) {
-    const file = e.target.files?.[0];
-    const project = getSelectedProject();
-    if (!file || !project) return;
-
-    const reader = new FileReader();
-    reader.onload = () => {
-      project.coverImage = reader.result;
-      setIfExists("coverImageUrl", project.coverImage);
-      commit();
-    };
-    reader.readAsDataURL(file);
     e.target.value = "";
+    showToast("File uploads are disabled for this Wix-compliant version. Please paste an image URL instead.");
   }
 
   function handleGalleryUpload(e) {
-    const files = [...(e.target.files || [])];
-    const project = getSelectedProject();
-    if (!files.length || !project) return;
-
-    let completed = 0;
-    files.forEach(file => {
-      const reader = new FileReader();
-      reader.onload = () => {
-        project.galleryImages.push(reader.result);
-        completed += 1;
-        if (completed === files.length) {
-          commit();
-        }
-      };
-      reader.readAsDataURL(file);
-    });
-
     e.target.value = "";
+    showToast("File uploads are disabled for this Wix-compliant version. Please add image URLs instead.");
   }
 
   function addGalleryUrl() {
@@ -813,59 +765,48 @@ if (state.design.textPanelStyle === "solid") {
   }
 
   function normalizeProject(project) {
-  return {
-    id: project.id || generateId(),
-    title: project.title || "Untitled Project",
-    category: project.category || "Uncategorised",
-    description: project.description || "",
-    coverImage: project.coverImage || "",
-    galleryImages: Array.isArray(project.galleryImages) ? project.galleryImages.filter(Boolean) : [],
-    modalImageFit: project.modalImageFit || "",
-    visible: project.visible !== false
-  };
-}
+    return {
+      id: project.id || generateId(),
+      title: project.title || "Untitled Project",
+      category: project.category || "Uncategorised",
+      description: project.description || "",
+      coverImage: project.coverImage || "",
+      galleryImages: Array.isArray(project.galleryImages) ? project.galleryImages.filter(Boolean) : [],
+      modalImageFit: project.modalImageFit || "",
+      visible: project.visible !== false
+    };
+  }
 
   function generateId() {
     return "p_" + Math.random().toString(36).slice(2, 11);
   }
 
   function exportCSVTemplate() {
-  const rows = [
-    [
-      "# Pro Filter Gallery CSV Template"
-    ],
-    [
-      "# galleryImages should be separated with | and visible should be true or false"
-    ],
-    [
-      "title",
-      "category",
-      "description",
-      "coverImage",
-      "galleryImages",
-      "visible"
-    ],
-    [
-      "Studio Direction",
-      "Branding",
-      "A premium identity system built around texture, restraint, and luxury positioning.",
-      "https://example.com/cover-1.jpg",
-      "https://example.com/gallery-1.jpg|https://example.com/gallery-2.jpg",
-      "true"
-    ],
-    [
-      "Luxury Commerce",
-      "Web",
-      "A high-end e-commerce interface focused on clarity, hierarchy, and conversion-led design.",
-      "https://example.com/cover-2.jpg",
-      "https://example.com/gallery-3.jpg|https://example.com/gallery-4.jpg",
-      "true"
-    ]
-  ];
+    const rows = [
+      ["# Pro Filter Gallery CSV Template"],
+      ["# galleryImages should be separated with | and visible should be true or false"],
+      ["title", "category", "description", "coverImage", "galleryImages", "visible"],
+      [
+        "Studio Direction",
+        "Branding",
+        "A premium identity system built around texture, restraint, and luxury positioning.",
+        "https://example.com/cover-1.jpg",
+        "https://example.com/gallery-1.jpg|https://example.com/gallery-2.jpg",
+        "true"
+      ],
+      [
+        "Luxury Commerce",
+        "Web",
+        "A high-end e-commerce interface focused on clarity, hierarchy, and conversion-led design.",
+        "https://example.com/cover-2.jpg",
+        "https://example.com/gallery-3.jpg|https://example.com/gallery-4.jpg",
+        "true"
+      ]
+    ];
 
-  const csv = rows.map(row => row.map(csvEscape).join(",")).join("\n");
-  download("pro-filter-gallery-template.csv", csv);
-}
+    const csv = rows.map(row => row.map(csvEscape).join(",")).join("\n");
+    download("pro-filter-gallery-template.csv", csv);
+  }
 
   function importCSV(e) {
     const file = e.target.files?.[0];
@@ -950,33 +891,49 @@ if (state.design.textPanelStyle === "solid") {
     return str;
   }
 
- function download(name, text) {
-  const blob = new Blob([text], { type: "text/csv;charset=utf-8;" });
+  function download(name, text) {
+    const blob = new Blob([text], { type: "text/csv;charset=utf-8;" });
 
-  if (navigator.msSaveBlob) {
-    navigator.msSaveBlob(blob, name);
-    return;
+    if (navigator.msSaveBlob) {
+      navigator.msSaveBlob(blob, name);
+      return;
+    }
+
+    const link = document.createElement("a");
+
+    if (link.download !== undefined) {
+      const url = URL.createObjectURL(blob);
+      link.setAttribute("href", url);
+      link.setAttribute("download", name);
+      link.style.visibility = "hidden";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } else {
+      const reader = new FileReader();
+      reader.onload = function () {
+        window.open(reader.result);
+      };
+      reader.readAsDataURL(blob);
+    }
   }
 
-  const link = document.createElement("a");
+  function showToast(message) {
+    const toast = byId("toast");
+    if (!toast) {
+      console.warn(message);
+      return;
+    }
 
-  if (link.download !== undefined) {
-    const url = URL.createObjectURL(blob);
-    link.setAttribute("href", url);
-    link.setAttribute("download", name);
-    link.style.visibility = "hidden";
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-  } else {
-    const reader = new FileReader();
-    reader.onload = function () {
-      window.open(reader.result);
-    };
-    reader.readAsDataURL(blob);
+    toast.textContent = message;
+    toast.classList.add("show");
+
+    clearTimeout(showToast._timer);
+    showToast._timer = setTimeout(() => {
+      toast.classList.remove("show");
+    }, 2600);
   }
-}
 
   function byId(id) {
     return document.getElementById(id);
@@ -1020,15 +977,15 @@ if (state.design.textPanelStyle === "solid") {
   }
 
   function mapSliderToSizePreset(value) {
-  const n = Number(value);
-  if (n <= 15) return "small";
-  if (n >= 18) return "large";
-  return "medium";
-}
+    const n = Number(value);
+    if (n <= 15) return "small";
+    if (n >= 18) return "large";
+    return "medium";
+  }
 
   function mapPresetToSliderValue(value) {
-  if (value === "small") return 14;
-  if (value === "large") return 20;
-  return 16;
-}
+    if (value === "small") return 14;
+    if (value === "large") return 20;
+    return 16;
+  }
 });
