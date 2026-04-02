@@ -168,26 +168,21 @@ function wireResponsivePreview() {
     }
   }
 
-  async function bootstrapWixState() {
-  if (!window.Wix || typeof Wix.getProp !== "function" || typeof Wix.setProp !== "function") {
-    return;
-  }
+async function bootstrapWixState() {
+  if (!window.Wix || typeof Wix.getProp !== "function") return;
 
   try {
     const existingProjects = await Wix.getProp("projects");
 
-    // If Wix already has saved projects, do nothing.
-    if (existingProjects && String(existingProjects).trim() !== "") {
-      return;
+    // If Wix has no projects yet, push the panel's current state into Wix
+    if (!existingProjects) {
+      await syncStateToWix();
     }
 
-    // First-time setup: push current default state into Wix
-    await syncStateToWix();
-  } catch (error) {
-    console.warn("Could not bootstrap Wix state", error);
+  } catch (e) {
+    console.warn("Bootstrap Wix state failed", e);
   }
 }
-  
 async function saveState() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
 
