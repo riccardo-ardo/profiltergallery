@@ -5,7 +5,10 @@
   <title>Portfolio Gallery</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
+  <!-- Wix SDK -->
   <script src="https://static.parastorage.com/services/js-sdk/1.388.0/app-sdk.js"></script>
+
+  <!-- Your widget -->
   <script src="./pro-filter-gallery.js" defer></script>
 
   <style>
@@ -29,10 +32,12 @@
   </style>
 </head>
 <body>
+
   <pro-filter-gallery></pro-filter-gallery>
 
   <script>
-    window.onload = async function () {
+    document.addEventListener("DOMContentLoaded", async function () {
+
       const gallery = document.querySelector("pro-filter-gallery");
 
       async function hydrateFromWixProps() {
@@ -70,20 +75,25 @@
           if (descsize) gallery.setAttribute("descsize", descsize);
           if (categorysize) gallery.setAttribute("categorysize", categorysize);
           if (modalimagefit) gallery.setAttribute("modalimagefit", modalimagefit);
+
         } catch (e) {
           console.warn("Could not hydrate widget from Wix props", e);
         }
       }
 
       if (window.Wix && Wix.addEventListener) {
-        Wix.addEventListener(Wix.Events.SETTINGS_UPDATED, async function () {
+
+        // 🔥 CRITICAL: Always rehydrate full state
+        Wix.addEventListener(Wix.Events.SETTINGS_UPDATED, async () => {
           await hydrateFromWixProps();
         });
 
+        // Wix lifecycle
         try {
           Wix.reportAppLoaded();
         } catch (e) {}
 
+        // Auto height
         function reportHeight() {
           try {
             Wix.setHeight(document.body.scrollHeight);
@@ -94,49 +104,12 @@
         const observer = new ResizeObserver(reportHeight);
         observer.observe(document.body);
 
+        // 🔥 Initial load
         await hydrateFromWixProps();
       }
-    };
+
+    });
   </script>
-</body>
-</html>        if (radius) gallery.setAttribute("radius", radius);
-        if (cardpanelbg) gallery.setAttribute("cardpanelbg", cardpanelbg);
-        if (textpanelstyle) gallery.setAttribute("textpanelstyle", textpanelstyle);
-        if (overlaystrength) gallery.setAttribute("overlaystrength", overlaystrength);
-        if (showcategory) gallery.setAttribute("showcategory", showcategory);
-        if (showfilters) gallery.setAttribute("showfilters", showfilters);
-        if (enablemodal) gallery.setAttribute("enablemodal", enablemodal);
-        if (titlesize) gallery.setAttribute("titlesize", titlesize);
-        if (descsize) gallery.setAttribute("descsize", descsize);
-        if (categorysize) gallery.setAttribute("categorysize", categorysize);
-        if (modalimagefit) gallery.setAttribute("modalimagefit", modalimagefit);
-      } catch (e) {
-        console.warn("Could not hydrate widget from Wix props", e);
-      }
-    }
 
-    if (window.Wix && Wix.addEventListener) {
-      Wix.addEventListener(Wix.Events.SETTINGS_UPDATED, async function () {
-        await hydrateFromWixProps();
-      });
-
-      try {
-        Wix.reportAppLoaded();
-      } catch (e) {}
-
-      function reportHeight() {
-        try {
-          Wix.setHeight(document.body.scrollHeight);
-        } catch (e) {}
-      }
-
-      reportHeight();
-      const observer = new ResizeObserver(reportHeight);
-      observer.observe(document.body);
-
-      await hydrateFromWixProps();
-    }
-  };
-</script>
 </body>
 </html>
