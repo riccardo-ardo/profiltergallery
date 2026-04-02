@@ -180,6 +180,7 @@ async function saveState() {
     await Wix.setProp("modalimagefit", String(state.design.modalImageFit || "cover"));
   } catch (error) {
     console.warn("Could not sync props to Wix", error);
+    await Wix.setProp("textpanelstyle", String(state.design.textPanelStyle || "fade"));
   }
 }
 
