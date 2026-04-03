@@ -1,4 +1,9 @@
 document.addEventListener("DOMContentLoaded", () => {
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Defaults
+  // ─────────────────────────────────────────────────────────────────────────
+
   const DEFAULT_DESIGN = {
     columns: 3,
     cardGap: 16,
@@ -56,18 +61,76 @@ document.addEventListener("DOMContentLoaded", () => {
     ]
   };
 
+  // ─────────────────────────────────────────────────────────────────────────
+  // Runtime state
+  // ─────────────────────────────────────────────────────────────────────────
+
   let state = structuredClone(DEFAULT_STATE);
   let selectedProjectId = null;
   let activeView = "hub";
   let saveTimeout = null;
-  let isBootstrapping = false;
+  let _widgetStateReceived = false; // tracks whether widget replied to GET_STATE
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // postMessage bridge — replaces Wix.getProp / Wix.setProp
+  // ─────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Send a single prop update to the widget.
+   * The widget's _bindSettingsMessages() listener picks this up and calls
+   * this.setAttribute(key, value), which triggers attributeChangedCallback.
+   */
+  function setProp(key, value) {
+    window.parent.postMessage(
+      { type: "SET_PROP", key, value: String(value) },
+      "*"
+    );
+  }
+
+  /**
+   * Send the full state to the widget in one batch.
+   * More efficient than 15 individual setProp calls.
+   */
+  function setAllProps(props) {
+    window.parent.postMessage(
+      { type: "SET_ALL_PROPS", props },
+      "*"
+    );
+  }
+
+  /**
+   * Ask the widget to send its current state back.
+   * The widget replies with { type: "WIDGET_STATE", state: {...} }.
+   * We wait up to 600ms; if no reply, fall back to DEFAULT_STATE.
+   */
+  function requestWidgetState() {
+    return new Promise((resolve) => {
+      const timeout = setTimeout(() => {
+        // Widget didn't reply in time — use defaults
+        resolve(null);
+      }, 600);
+
+      const handler = (event) => {
+        if (event.data?.type === "WIDGET_STATE") {
+          clearTimeout(timeout);
+          window.removeEventListener("message", handler);
+          resolve(event.data.state);
+        }
+      };
+
+      window.addEventListener("message", handler);
+      window.parent.postMessage({ type: "GET_STATE" }, "*");
+    });
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Init
+  // ─────────────────────────────────────────────────────────────────────────
 
   init();
 
   async function init() {
-    await bootstrapWixState();
-    await loadStateFromWixProps();
-    ensureSelectedProject();
+    await loadStateFromWidget();
 
     wireNavigation();
     wireActions();
@@ -76,200 +139,127 @@ document.addEventListener("DOMContentLoaded", () => {
     wireResponsivePreview();
     setView(getInitialView());
     renderAll();
-
-    if (window.Wix && Wix.addEventListener) {
-      Wix.addEventListener(Wix.Events.SETTINGS_UPDATED, async () => {
-        await loadStateFromWixProps();
-        ensureSelectedProject();
-        renderAll();
-      });
-    }
   }
 
-  async function loadStateFromWixProps() {
-    if (!window.Wix || typeof Wix.getProp !== "function") {
+  /**
+   * Replaces bootstrapWixState() + loadStateFromWixProps().
+   * Asks the widget for its current state via postMessage.
+   * If the widget has no saved state yet, pushes the defaults to it.
+   */
+  async function loadStateFromWidget() {
+    const widgetState = await requestWidgetState();
+
+    if (!widgetState) {
+      // Widget had nothing — use defaults and push them to it
       state = structuredClone(DEFAULT_STATE);
+      _pushStateToWidget(state, { bootstrap: true });
       return;
     }
 
-    try {
-      const [
-        projectsProp,
-        accent,
-        columns,
-        gap,
-        radius,
-        cardpanelbg,
-        showcategory,
-        showfilters,
-        enablemodal,
-        titlesize,
-        descsize,
-        categorysize,
-        modalimagefit,
-        textpanelstyle,
-        overlaystrength
-      ] = await Promise.all([
-        Wix.getProp("projects"),
-        Wix.getProp("accent"),
-        Wix.getProp("columns"),
-        Wix.getProp("gap"),
-        Wix.getProp("radius"),
-        Wix.getProp("cardpanelbg"),
-        Wix.getProp("showcategory"),
-        Wix.getProp("showfilters"),
-        Wix.getProp("enablemodal"),
-        Wix.getProp("titlesize"),
-        Wix.getProp("descsize"),
-        Wix.getProp("categorysize"),
-        Wix.getProp("modalimagefit"),
-        Wix.getProp("textpanelstyle"),
-        Wix.getProp("overlaystrength")
-      ]);
+    // Hydrate local state from what the widget reported back
+    state = structuredClone(DEFAULT_STATE);
 
-      state = structuredClone(DEFAULT_STATE);
-
-      if (projectsProp) {
-        try {
-          const parsedProjects = JSON.parse(projectsProp);
-          if (Array.isArray(parsedProjects) && parsedProjects.length) {
-            state.projects = parsedProjects.map(normalizeProject);
-          }
-        } catch (e) {
-          console.warn("Could not parse Wix projects prop", e);
-        }
-      }
-
-      if (accent) state.design.accentColor = accent;
-      if (columns) state.design.columns = Number(columns) || DEFAULT_DESIGN.columns;
-      if (gap) state.design.cardGap = Number(gap) || DEFAULT_DESIGN.cardGap;
-      if (radius) state.design.cardRadius = Number(radius) || DEFAULT_DESIGN.cardRadius;
-      if (cardpanelbg) state.design.cardBackground = cardpanelbg;
-      if (typeof showcategory === "string") state.design.showCategory = showcategory === "true";
-      if (typeof showfilters === "string") state.design.showFilters = showfilters === "true";
-      if (typeof enablemodal === "string") state.design.enableModal = enablemodal === "true";
-      if (titlesize) state.design.titleSize = mapPresetToSliderValue(titlesize);
-      if (descsize) {
-        state.design.metaSize = mapPresetToSliderValue(descsize);
-      } else if (categorysize === "small") {
-        state.design.metaSize = 10;
-      } else if (categorysize === "medium") {
-        state.design.metaSize = 12;
-      }
-      if (modalimagefit) state.design.modalImageFit = modalimagefit;
-      if (textpanelstyle) state.design.textPanelStyle = textpanelstyle;
-      if (overlaystrength) state.design.overlayStrength = Number(overlaystrength) || DEFAULT_DESIGN.overlayStrength;
-    } catch (error) {
-      console.warn("Could not load Wix props into settings panel", error);
-      state = structuredClone(DEFAULT_STATE);
+    // Projects — widget stores them as normalised objects
+    if (Array.isArray(widgetState.projects) && widgetState.projects.length) {
+      state.projects = widgetState.projects.map(normalizeProject);
     }
+
+    // Design config — map widget config keys → panel design keys
+    const d = state.design;
+    const c = widgetState; // shorthand for config fields
+
+    if (c.accent)           d.accentColor     = c.accent;
+    if (c.columns)          d.columns         = Number(c.columns)         || DEFAULT_DESIGN.columns;
+    if (c.gap)              d.cardGap         = Number(c.gap)             || DEFAULT_DESIGN.cardGap;
+    if (c.radius)           d.cardRadius      = Number(c.radius)          || DEFAULT_DESIGN.cardRadius;
+    if (c.cardPanelBg)      d.cardBackground  = c.cardPanelBg;
+    if (c.textPanelStyle)   d.textPanelStyle  = c.textPanelStyle;
+    if (c.overlayStrength != null) d.overlayStrength = Number(c.overlayStrength);
+    if (c.showCategory != null)    d.showCategory    = Boolean(c.showCategory);
+    if (c.showFilters  != null)    d.showFilters     = Boolean(c.showFilters);
+    if (c.enableModal  != null)    d.enableModal     = Boolean(c.enableModal);
+    if (c.modalImageFit)    d.modalImageFit   = c.modalImageFit;
+    if (c.titleSize)        d.titleSize       = mapPresetToSliderValue(c.titleSize);
+    if (c.descSize)         d.metaSize        = mapPresetToSliderValue(c.descSize);
   }
 
-  function wireResponsivePreview() {
-    let resizeTimer;
-
-    window.addEventListener("resize", () => {
-      clearTimeout(resizeTimer);
-      resizeTimer = setTimeout(() => {
-        renderDesignPreview();
-      }, 120);
-    });
-  }
-
-  async function bootstrapWixState() {
-    if (!window.Wix || typeof Wix.getProp !== "function") return;
-    if (isBootstrapping) return;
-
-    isBootstrapping = true;
-
-    try {
-      const existingProjects = await Wix.getProp("projects");
-
-      if (!existingProjects) {
-        await syncStateToWix(structuredClone(DEFAULT_STATE), { silent: true });
-      }
-    } catch (e) {
-      console.warn("Bootstrap Wix state failed", e);
-    } finally {
-      isBootstrapping = false;
-    }
-  }
+  // ─────────────────────────────────────────────────────────────────────────
+  // Saving — replaces syncStateToWix
+  // ─────────────────────────────────────────────────────────────────────────
 
   function saveState() {
     clearTimeout(saveTimeout);
-    saveTimeout = setTimeout(async () => {
-      try {
-        await syncStateToWix(state);
-      } catch (error) {
-        console.warn("Debounced Wix sync failed", error);
-      }
-    }, 300);
+    saveTimeout = setTimeout(() => {
+      _pushStateToWidget(state);
+    }, 300); // 300ms debounce — same as original
   }
 
-  async function syncStateToWix(sourceState = state, options = {}) {
-    if (!window.Wix || typeof Wix.setProp !== "function") return false;
+  /**
+   * Converts the panel's internal state format into the widget's attribute
+   * format and sends the whole lot in a single SET_ALL_PROPS message.
+   *
+   * @param {object}  sourceState  - panel state object to push
+   * @param {object}  options
+   * @param {boolean} options.bootstrap - if true, silently ignore size errors
+   */
+  function _pushStateToWidget(sourceState = state, options = {}) {
+    const { bootstrap = false } = options;
 
-    const { silent = false } = options;
     const projectsJson = JSON.stringify(sourceState.projects);
 
     if (projectsJson.length > 40000) {
-      console.warn("Projects data too large for Wix props.");
-      if (!silent) showToast("Projects are too large to save. Use image URLs only.");
-      return false;
-    }
-
-    try {
-      await Promise.all([
-        Wix.setProp("projects", projectsJson),
-        Wix.setProp("accent", String(sourceState.design.accentColor || "#7c9cff")),
-        Wix.setProp("columns", String(sourceState.design.columns ?? 3)),
-        Wix.setProp("gap", String(sourceState.design.cardGap ?? 16)),
-        Wix.setProp("radius", String(sourceState.design.cardRadius ?? 20)),
-        Wix.setProp("cardpanelbg", String(sourceState.design.cardBackground || "#111722")),
-        Wix.setProp("textpanelstyle", String(sourceState.design.textPanelStyle || "fade")),
-        Wix.setProp("overlaystrength", String(sourceState.design.overlayStrength ?? 72)),
-        Wix.setProp("showcategory", String(!!sourceState.design.showCategory)),
-        Wix.setProp("showfilters", String(!!sourceState.design.showFilters)),
-        Wix.setProp("enablemodal", String(!!sourceState.design.enableModal)),
-        Wix.setProp("titlesize", mapSliderToSizePreset(sourceState.design.titleSize)),
-        Wix.setProp("descsize", mapSliderToSizePreset(sourceState.design.metaSize)),
-        Wix.setProp("categorysize", Number(sourceState.design.metaSize) <= 10 ? "small" : "medium"),
-        Wix.setProp("modalimagefit", String(sourceState.design.modalImageFit || "cover"))
-      ]);
-
-      return true;
-    } catch (error) {
-      console.warn("Could not sync state to Wix", error);
-      if (!silent) showToast("Could not save settings to Wix.");
-      return false;
-    }
-  }
-
-  function ensureSelectedProject() {
-    if (!state.projects.length) {
-      selectedProjectId = null;
+      console.warn("[ProFilterGallery] Projects data too large for widget props.");
+      if (!bootstrap) showToast("Projects are too large to save. Use image URLs only.");
       return;
     }
 
+    const props = {
+      projects:       projectsJson,
+      accent:         String(sourceState.design.accentColor   || "#7c9cff"),
+      columns:        String(sourceState.design.columns        ?? 3),
+      gap:            String(sourceState.design.cardGap        ?? 16),
+      radius:         String(sourceState.design.cardRadius     ?? 20),
+      cardpanelbg:    String(sourceState.design.cardBackground || "#111722"),
+      textpanelstyle: String(sourceState.design.textPanelStyle || "fade"),
+      overlaystrength:String(sourceState.design.overlayStrength ?? 72),
+      showcategory:   String(!!sourceState.design.showCategory),
+      showfilters:    String(!!sourceState.design.showFilters),
+      enablemodal:    String(!!sourceState.design.enableModal),
+      titlesize:      mapSliderToSizePreset(sourceState.design.titleSize),
+      descsize:       mapSliderToSizePreset(sourceState.design.metaSize),
+      categorysize:   Number(sourceState.design.metaSize) <= 10 ? "small" : "medium",
+      modalimagefit:  String(sourceState.design.modalImageFit  || "cover")
+    };
+
+    setAllProps(props);
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Project helpers
+  // ─────────────────────────────────────────────────────────────────────────
+
+  function ensureSelectedProject() {
+    if (!state.projects.length) { selectedProjectId = null; return; }
     const exists = state.projects.some(p => p.id === selectedProjectId);
-    if (!selectedProjectId || !exists) {
-      selectedProjectId = state.projects[0].id;
-    }
+    if (!selectedProjectId || !exists) selectedProjectId = state.projects[0].id;
   }
 
   function getInitialView() {
     const active = document.querySelector(".view.active");
-    if (active?.id === "view-hub") return "hub";
-    if (active?.id === "view-design") return "design";
+    if (active?.id === "view-hub")     return "hub";
+    if (active?.id === "view-design")  return "design";
     if (active?.id === "view-content") return "content";
     return "hub";
   }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Navigation
+  // ─────────────────────────────────────────────────────────────────────────
 
   function wireNavigation() {
     document.querySelectorAll("[data-view-target]").forEach(btn => {
       btn.addEventListener("click", () => setView(btn.dataset.viewTarget));
     });
-
     document.querySelectorAll("[data-go]").forEach(btn => {
       btn.addEventListener("click", () => setView(btn.dataset.go));
     });
@@ -278,44 +268,37 @@ document.addEventListener("DOMContentLoaded", () => {
   function setView(view) {
     activeView = view;
 
-    document.querySelectorAll(".view").forEach(v => {
-      v.classList.remove("active");
-    });
-
+    document.querySelectorAll(".view").forEach(v => v.classList.remove("active"));
     const target = document.getElementById(`view-${view}`);
     if (target) target.classList.add("active");
 
     document.querySelectorAll(".rail-btn").forEach(btn => {
       btn.classList.remove("active");
-      if (btn.dataset.viewTarget === view) {
-        btn.classList.add("active");
-      }
+      if (btn.dataset.viewTarget === view) btn.classList.add("active");
     });
 
     document.querySelectorAll(".mobile-nav-btn").forEach(btn => {
       btn.classList.remove("active");
-      if (btn.dataset.viewTarget === view) {
-        btn.classList.add("active");
-      }
+      if (btn.dataset.viewTarget === view) btn.classList.add("active");
     });
   }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Actions
+  // ─────────────────────────────────────────────────────────────────────────
 
   function wireActions() {
     byId("newProjectBtn")?.addEventListener("click", createProject);
     byId("sidebarNewProjectBtn")?.addEventListener("click", createProject);
-
     byId("deleteProjectBtn")?.addEventListener("click", deleteProject);
     byId("duplicateProjectBtn")?.addEventListener("click", duplicateProject);
-
     byId("moveUpBtn")?.addEventListener("click", () => moveProject(-1));
     byId("moveDownBtn")?.addEventListener("click", () => moveProject(1));
-
     byId("projectSearch")?.addEventListener("input", renderProjects);
 
     byId("coverUploadBtn")?.addEventListener("click", () => {
       showToast("For marketplace-safe use, please paste an image URL instead of uploading a file.");
     });
-
     byId("galleryUploadBtn")?.addEventListener("click", () => {
       showToast("For marketplace-safe use, please paste image URLs instead of uploading files.");
     });
@@ -324,13 +307,15 @@ document.addEventListener("DOMContentLoaded", () => {
     byId("galleryImageUpload")?.addEventListener("change", handleGalleryUpload);
 
     byId("addGalleryUrlBtn")?.addEventListener("click", addGalleryUrl);
-
     byId("importCsvBtn")?.addEventListener("click", () => byId("csvFileInput")?.click());
     byId("csvFileInput")?.addEventListener("change", importCSV);
-
     byId("exportTemplateBtn")?.addEventListener("click", exportCSVTemplate);
     byId("downloadCsvTemplateBtn")?.addEventListener("click", exportCSVTemplate);
   }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Editor fields
+  // ─────────────────────────────────────────────────────────────────────────
 
   function wireEditorFields() {
     byId("projectTitle")?.addEventListener("input", e => {
@@ -380,30 +365,30 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
+  // ─────────────────────────────────────────────────────────────────────────
+  // Design controls
+  // ─────────────────────────────────────────────────────────────────────────
+
   function wireDesignControls() {
-    bindDesignControl("layoutColumns", "columns", "value", Number);
-    bindDesignControl("cardGap", "cardGap", "value", Number);
-    bindDesignControl("cardRadius", "cardRadius", "value", Number);
-    bindDesignControl("cardBackground", "cardBackground", "value", value => value);
-    bindDesignControl("textPanelStyle", "textPanelStyle", "value", value => value);
-    bindDesignControl("overlayStrength", "overlayStrength", "value", Number);
-    bindDesignControl("showCategory", "showCategory", "checked", value => value);
-    bindDesignControl("titleSize", "titleSize", "value", Number);
-    bindDesignControl("metaSize", "metaSize", "value", Number);
-    bindDesignControl("showFilters", "showFilters", "checked", value => value);
-    bindDesignControl("accentColor", "accentColor", "value", value => value);
-    bindDesignControl("enableModal", "enableModal", "checked", value => value);
-    bindDesignControl("modalImageFit", "modalImageFit", "value", value => value);
-    bindDesignControl("showGalleryCount", "showGalleryCount", "checked", value => value);
+    bindDesignControl("layoutColumns",  "columns",       "value",   Number);
+    bindDesignControl("cardGap",        "cardGap",       "value",   Number);
+    bindDesignControl("cardRadius",     "cardRadius",    "value",   Number);
+    bindDesignControl("cardBackground", "cardBackground","value",   v => v);
+    bindDesignControl("textPanelStyle", "textPanelStyle","value",   v => v);
+    bindDesignControl("overlayStrength","overlayStrength","value",  Number);
+    bindDesignControl("showCategory",   "showCategory",  "checked", v => v);
+    bindDesignControl("titleSize",      "titleSize",     "value",   Number);
+    bindDesignControl("metaSize",       "metaSize",      "value",   Number);
+    bindDesignControl("showFilters",    "showFilters",   "checked", v => v);
+    bindDesignControl("accentColor",    "accentColor",   "value",   v => v);
+    bindDesignControl("enableModal",    "enableModal",   "checked", v => v);
+    bindDesignControl("modalImageFit",  "modalImageFit", "value",   v => v);
+    bindDesignControl("showGalleryCount","showGalleryCount","checked",v => v);
   }
 
   function bindDesignControl(id, key, prop, transform) {
     const el = byId(id);
     if (!el) return;
-
-    const eventName = el.type === "range" || el.type === "color" || el.tagName === "INPUT"
-      ? "input"
-      : "change";
 
     const handler = () => {
       state.design[key] = transform(el[prop]);
@@ -415,7 +400,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (el.type === "checkbox" || el.tagName === "SELECT") {
       el.addEventListener("change", handler);
     } else {
-      el.addEventListener(eventName, handler);
+      el.addEventListener("input", handler);
     }
   }
 
@@ -423,6 +408,22 @@ document.addEventListener("DOMContentLoaded", () => {
     saveState();
     if (render) renderAll();
   }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Responsive preview
+  // ─────────────────────────────────────────────────────────────────────────
+
+  function wireResponsivePreview() {
+    let resizeTimer;
+    window.addEventListener("resize", () => {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(() => renderDesignPreview(), 120);
+    });
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Project CRUD
+  // ─────────────────────────────────────────────────────────────────────────
 
   function createProject() {
     const project = normalizeProject({
@@ -435,10 +436,8 @@ document.addEventListener("DOMContentLoaded", () => {
       modalImageFit: "",
       visible: true
     });
-
     state.projects.unshift(project);
     selectedProjectId = project.id;
-
     saveState();
     renderAll();
     setView("content");
@@ -446,7 +445,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function deleteProject() {
     if (!selectedProjectId) return;
-
     state.projects = state.projects.filter(p => p.id !== selectedProjectId);
     ensureSelectedProject();
     saveState();
@@ -456,18 +454,10 @@ document.addEventListener("DOMContentLoaded", () => {
   function duplicateProject() {
     const p = getSelectedProject();
     if (!p) return;
-
-    const copy = normalizeProject({
-      ...p,
-      id: generateId(),
-      title: `${p.title} Copy`,
-      galleryImages: [...p.galleryImages]
-    });
-
+    const copy = normalizeProject({ ...p, id: generateId(), title: `${p.title} Copy`, galleryImages: [...p.galleryImages] });
     const index = state.projects.findIndex(x => x.id === p.id);
     state.projects.splice(index + 1, 0, copy);
     selectedProjectId = copy.id;
-
     saveState();
     renderAll();
   }
@@ -475,15 +465,16 @@ document.addEventListener("DOMContentLoaded", () => {
   function moveProject(dir) {
     const index = state.projects.findIndex(p => p.id === selectedProjectId);
     if (index === -1) return;
-
     const target = index + dir;
     if (target < 0 || target >= state.projects.length) return;
-
     [state.projects[index], state.projects[target]] = [state.projects[target], state.projects[index]];
-
     saveState();
     renderAll();
   }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Render
+  // ─────────────────────────────────────────────────────────────────────────
 
   function renderAll() {
     ensureSelectedProject();
@@ -513,10 +504,7 @@ document.addEventListener("DOMContentLoaded", () => {
       el.className = "project-row";
       if (project.id === selectedProjectId) el.classList.add("active");
 
-      const thumb = project.coverImage
-        ? `background-image:url('${escapeAttr(project.coverImage)}');`
-        : "";
-
+      const thumb = project.coverImage ? `background-image:url('${escapeAttr(project.coverImage)}');` : "";
       el.innerHTML = `
         <div class="row-thumb" style="${thumb}"></div>
         <div class="row-copy">
@@ -536,25 +524,25 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function renderEditor() {
-    const empty = byId("editorEmpty");
+    const empty   = byId("editorEmpty");
     const content = byId("editorContent");
     const project = getSelectedProject();
 
     if (!project) {
-      if (empty) empty.style.display = "grid";
+      if (empty)   empty.style.display   = "grid";
       if (content) content.style.display = "none";
       return;
     }
 
-    if (empty) empty.style.display = "none";
+    if (empty)   empty.style.display   = "none";
     if (content) content.style.display = "block";
 
-    setIfExists("projectTitle", project.title || "");
-    setIfExists("projectCategory", project.category || "");
-    setIfExists("projectModalImageFit", project.modalImageFit || "");
-    setIfExists("projectDescription", project.description || "");
+    setIfExists("projectTitle",          project.title        || "");
+    setIfExists("projectCategory",       project.category     || "");
+    setIfExists("projectModalImageFit",  project.modalImageFit || "");
+    setIfExists("projectDescription",    project.description  || "");
     setCheckedIfExists("projectVisible", !!project.visible);
-    setIfExists("coverImageUrl", project.coverImage || "");
+    setIfExists("coverImageUrl",         project.coverImage   || "");
 
     renderCoverPreview();
     renderGalleryThumbs();
@@ -564,26 +552,22 @@ document.addEventListener("DOMContentLoaded", () => {
     const project = getSelectedProject();
     const preview = byId("coverPreview");
     if (!project || !preview) return;
-
-    preview.style.backgroundImage = project.coverImage
-      ? `url('${project.coverImage}')`
-      : "none";
+    preview.style.backgroundImage = project.coverImage ? `url('${project.coverImage}')` : "none";
   }
 
   function renderGalleryThumbs() {
-    const project = getSelectedProject();
+    const project   = getSelectedProject();
     const container = byId("galleryThumbs");
     if (!project || !container) return;
 
     container.innerHTML = "";
-
     project.galleryImages.forEach((url, index) => {
-      const item = document.createElement("div");
+      const item   = document.createElement("div");
       item.className = "img-chip";
       item.style.backgroundImage = `url('${url}')`;
 
       const remove = document.createElement("button");
-      remove.type = "button";
+      remove.type        = "button";
       remove.textContent = "×";
       remove.addEventListener("click", () => {
         project.galleryImages.splice(index, 1);
@@ -596,47 +580,40 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function renderStats() {
-    const total = state.projects.length;
+    const total   = state.projects.length;
     const visible = state.projects.filter(p => p.visible).length;
-
     if (byId("statProjects")) byId("statProjects").innerText = total;
-    if (byId("statVisible")) byId("statVisible").innerText = visible;
+    if (byId("statVisible"))  byId("statVisible").innerText  = visible;
   }
 
   function renderTopBadge() {
     const badge = byId("projectCountBadge");
-    if (badge) {
-      badge.textContent = `${state.projects.length} Project${state.projects.length === 1 ? "" : "s"}`;
-    }
+    if (badge) badge.textContent = `${state.projects.length} Project${state.projects.length === 1 ? "" : "s"}`;
   }
 
   function renderContentSnapshot() {
-    const lastEdited = byId("snapshotLastEdited");
+    const lastEdited    = byId("snapshotLastEdited");
     const categoryCount = byId("snapshotCategoryCount");
-    const hiddenCount = byId("snapshotHiddenCount");
-    const previews = byId("snapshotPreviews");
+    const hiddenCount   = byId("snapshotHiddenCount");
+    const previews      = byId("snapshotPreviews");
 
     if (!lastEdited || !categoryCount || !hiddenCount || !previews) return;
 
-    const categories = [...new Set(state.projects.map(p => p.category).filter(Boolean))];
-    const hiddenProjects = state.projects.filter(p => !p.visible);
+    const categories      = [...new Set(state.projects.map(p => p.category).filter(Boolean))];
+    const hiddenProjects  = state.projects.filter(p => !p.visible);
 
-    lastEdited.textContent = state.projects[0]?.title || "—";
+    lastEdited.textContent    = state.projects[0]?.title || "—";
     categoryCount.textContent = categories.length;
-    hiddenCount.textContent = hiddenProjects.length;
+    hiddenCount.textContent   = hiddenProjects.length;
 
     previews.innerHTML = "";
-
     state.projects.slice(0, 2).forEach(project => {
-      const card = document.createElement("div");
+      const card  = document.createElement("div");
       card.className = "snapshot-card";
 
       const thumb = document.createElement("div");
       thumb.className = "thumb";
-
-      if (project.coverImage) {
-        thumb.style.backgroundImage = `url('${project.coverImage}')`;
-      }
+      if (project.coverImage) thumb.style.backgroundImage = `url('${project.coverImage}')`;
 
       const copy = document.createElement("div");
       copy.className = "copy";
@@ -652,13 +629,13 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function renderDesignControlsFromState() {
-    setIfExists("layoutColumns", state.design.columns);
+    setIfExists("layoutColumns",  state.design.columns);
     setTextIfExists("layoutColumnsValue", state.design.columns);
 
-    setIfExists("cardGap", state.design.cardGap);
+    setIfExists("cardGap",        state.design.cardGap);
     setTextIfExists("cardGapValue", state.design.cardGap);
 
-    setIfExists("cardRadius", state.design.cardRadius);
+    setIfExists("cardRadius",     state.design.cardRadius);
     setTextIfExists("cardRadiusValue", state.design.cardRadius);
 
     setIfExists("cardBackground", state.design.cardBackground);
@@ -669,31 +646,31 @@ document.addEventListener("DOMContentLoaded", () => {
 
     setCheckedIfExists("showCategory", state.design.showCategory);
 
-    setIfExists("titleSize", state.design.titleSize);
+    setIfExists("titleSize",  state.design.titleSize);
     setTextIfExists("titleSizeValue", state.design.titleSize);
 
-    setIfExists("metaSize", state.design.metaSize);
+    setIfExists("metaSize",   state.design.metaSize);
     setTextIfExists("metaSizeValue", state.design.metaSize);
 
-    setCheckedIfExists("showFilters", state.design.showFilters);
-    setIfExists("accentColor", state.design.accentColor);
-    setCheckedIfExists("enableModal", state.design.enableModal);
-    setIfExists("modalImageFit", state.design.modalImageFit || "cover");
+    setCheckedIfExists("showFilters",      state.design.showFilters);
+    setIfExists("accentColor",             state.design.accentColor);
+    setCheckedIfExists("enableModal",      state.design.enableModal);
+    setIfExists("modalImageFit",           state.design.modalImageFit || "cover");
     setCheckedIfExists("showGalleryCount", state.design.showGalleryCount);
   }
 
   function renderDesignPreview() {
-    const previewGrid = byId("previewGrid");
+    const previewGrid    = byId("previewGrid");
     const previewFilters = byId("previewFilters");
     const galleryPreview = byId("galleryPreview");
 
     if (!previewGrid || !previewFilters) return;
 
     const visibleProjects = state.projects.filter(p => p.visible);
-    const categories = [...new Set(visibleProjects.map(p => p.category).filter(Boolean))];
+    const categories      = [...new Set(visibleProjects.map(p => p.category).filter(Boolean))];
 
     previewFilters.innerHTML = "";
-    previewGrid.innerHTML = "";
+    previewGrid.innerHTML    = "";
 
     const isMobile = window.innerWidth <= 640;
     const isTablet = window.innerWidth <= 980;
@@ -711,35 +688,31 @@ document.addEventListener("DOMContentLoaded", () => {
       const allChip = document.createElement("span");
       allChip.className = "chip active";
       allChip.textContent = "All";
-      allChip.style.background = `linear-gradient(135deg, ${hexToRgba(state.design.accentColor, 0.28)}, rgba(255,255,255,.06))`;
-      allChip.style.borderColor = hexToRgba(state.design.accentColor, 0.35);
+      allChip.style.background    = `linear-gradient(135deg, ${hexToRgba(state.design.accentColor, 0.28)}, rgba(255,255,255,.06))`;
+      allChip.style.borderColor   = hexToRgba(state.design.accentColor, 0.35);
       previewFilters.appendChild(allChip);
 
       categories.forEach(category => {
         const chip = document.createElement("span");
-        chip.className = "chip";
+        chip.className   = "chip";
         chip.textContent = category;
         previewFilters.appendChild(chip);
       });
     }
 
-    const previewProjects = isMobile
+    const previewProjects = (isMobile || isTablet)
       ? visibleProjects.slice(0, 3)
-      : isTablet
-        ? visibleProjects.slice(0, 3)
-        : visibleProjects;
+      : visibleProjects;
 
     previewProjects.forEach(project => {
       const item = document.createElement("article");
       item.className = "gallery-item";
       item.style.borderRadius = `${state.design.cardRadius}px`;
-      item.style.background = state.design.cardBackground;
+      item.style.background   = state.design.cardBackground;
 
       const thumb = document.createElement("div");
       thumb.className = "gallery-thumb";
-      if (project.coverImage) {
-        thumb.style.backgroundImage = `url('${project.coverImage}')`;
-      }
+      if (project.coverImage) thumb.style.backgroundImage = `url('${project.coverImage}')`;
 
       const overlay = document.createElement("div");
       overlay.className = "gallery-overlay";
@@ -752,26 +725,23 @@ document.addEventListener("DOMContentLoaded", () => {
 
       if (state.design.textPanelStyle === "solid") {
         copy.style.background = `rgba(16,17,23, ${Math.max(0.25, Math.min(1, state.design.overlayStrength / 100))})`;
-        copy.style.borderTop = "1px solid rgba(255,255,255,0.06)";
+        copy.style.borderTop  = "1px solid rgba(255,255,255,0.06)";
       }
 
       const title = document.createElement("strong");
-      title.textContent = project.title || "Untitled Project";
+      title.textContent  = project.title || "Untitled Project";
       title.style.fontSize = `${state.design.titleSize}px`;
-
       copy.appendChild(title);
 
       let metaText = "";
-      if (state.design.showCategory) {
-        metaText = project.category || "Uncategorised";
-      }
+      if (state.design.showCategory)    metaText = project.category || "Uncategorised";
       if (state.design.showGalleryCount && project.galleryImages?.length) {
         metaText += metaText ? ` • ${project.galleryImages.length} images` : `${project.galleryImages.length} images`;
       }
 
       if (metaText) {
         const meta = document.createElement("small");
-        meta.textContent = metaText;
+        meta.textContent    = metaText;
         meta.style.fontSize = `${state.design.metaSize}px`;
         copy.appendChild(meta);
       }
@@ -779,7 +749,6 @@ document.addEventListener("DOMContentLoaded", () => {
       item.appendChild(thumb);
       item.appendChild(overlay);
       item.appendChild(copy);
-
       previewGrid.appendChild(item);
     });
 
@@ -787,6 +756,10 @@ document.addEventListener("DOMContentLoaded", () => {
       galleryPreview.style.borderColor = hexToRgba(state.design.accentColor, 0.18);
     }
   }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // File / URL handlers
+  // ─────────────────────────────────────────────────────────────────────────
 
   function handleCoverUpload(e) {
     e.target.value = "";
@@ -799,64 +772,29 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function addGalleryUrl() {
-    const input = byId("galleryUrlInput");
+    const input   = byId("galleryUrlInput");
     const project = getSelectedProject();
     if (!input || !project) return;
-
     const url = input.value.trim();
     if (!url) return;
-
     project.galleryImages.push(url);
     input.value = "";
     commit();
   }
 
-  function getSelectedProject() {
-    return state.projects.find(p => p.id === selectedProjectId);
-  }
-
-  function normalizeProject(project) {
-    return {
-      id: project.id || generateId(),
-      title: project.title || "Untitled Project",
-      category: project.category || "Uncategorised",
-      description: project.description || "",
-      coverImage: project.coverImage || "",
-      galleryImages: Array.isArray(project.galleryImages) ? project.galleryImages.filter(Boolean) : [],
-      modalImageFit: project.modalImageFit || "",
-      visible: project.visible !== false
-    };
-  }
-
-  function generateId() {
-    return "p_" + Math.random().toString(36).slice(2, 11);
-  }
+  // ─────────────────────────────────────────────────────────────────────────
+  // CSV import / export
+  // ─────────────────────────────────────────────────────────────────────────
 
   function exportCSVTemplate() {
     const rows = [
       ["# Pro Filter Gallery CSV Template"],
       ["# galleryImages should be separated with | and visible should be true or false"],
       ["title", "category", "description", "coverImage", "galleryImages", "visible"],
-      [
-        "Studio Direction",
-        "Branding",
-        "A premium identity system built around texture, restraint, and luxury positioning.",
-        "https://example.com/cover-1.jpg",
-        "https://example.com/gallery-1.jpg|https://example.com/gallery-2.jpg",
-        "true"
-      ],
-      [
-        "Luxury Commerce",
-        "Web",
-        "A high-end e-commerce interface focused on clarity, hierarchy, and conversion-led design.",
-        "https://example.com/cover-2.jpg",
-        "https://example.com/gallery-3.jpg|https://example.com/gallery-4.jpg",
-        "true"
-      ]
+      ["Studio Direction", "Branding", "A premium identity system.", "https://example.com/cover-1.jpg", "https://example.com/g-1.jpg|https://example.com/g-2.jpg", "true"],
+      ["Luxury Commerce",  "Web",      "A high-end e-commerce interface.", "https://example.com/cover-2.jpg", "https://example.com/g-3.jpg", "true"]
     ];
-
-    const csv = rows.map(row => row.map(csvEscape).join(",")).join("\n");
-    download("pro-filter-gallery-template.csv", csv);
+    download("pro-filter-gallery-template.csv", rows.map(r => r.map(csvEscape).join(",")).join("\n"));
   }
 
   function importCSV(e) {
@@ -864,39 +802,34 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!file) return;
 
     const reader = new FileReader();
-
     reader.onload = () => {
       const lines = String(reader.result)
         .split(/\r?\n/)
-        .map(line => line.trim())
+        .map(l => l.trim())
         .filter(Boolean)
-        .filter(line => !line.startsWith("#"));
+        .filter(l => !l.startsWith("#"));
 
       if (lines.length < 2) return;
 
-      const rows = lines.map(parseCSVLine);
-      const headers = rows[0];
-
-      const headerMap = {
-        title: headers.indexOf("title"),
-        category: headers.indexOf("category"),
-        description: headers.indexOf("description"),
-        coverImage: headers.indexOf("coverImage"),
+      const rows       = lines.map(parseCSVLine);
+      const headers    = rows[0];
+      const headerMap  = {
+        title:         headers.indexOf("title"),
+        category:      headers.indexOf("category"),
+        description:   headers.indexOf("description"),
+        coverImage:    headers.indexOf("coverImage"),
         galleryImages: headers.indexOf("galleryImages"),
-        visible: headers.indexOf("visible")
+        visible:       headers.indexOf("visible")
       };
 
       state.projects = rows.slice(1).map(cols => normalizeProject({
-        id: generateId(),
-        title: cols[headerMap.title] || "",
-        category: cols[headerMap.category] || "",
-        description: cols[headerMap.description] || "",
-        coverImage: cols[headerMap.coverImage] || "",
-        galleryImages: (cols[headerMap.galleryImages] || "")
-          .split("|")
-          .map(v => v.trim())
-          .filter(Boolean),
-        visible: String(cols[headerMap.visible] || "").toLowerCase() !== "false"
+        id:            generateId(),
+        title:         cols[headerMap.title]        || "",
+        category:      cols[headerMap.category]     || "",
+        description:   cols[headerMap.description]  || "",
+        coverImage:    cols[headerMap.coverImage]   || "",
+        galleryImages: (cols[headerMap.galleryImages] || "").split("|").map(v => v.trim()).filter(Boolean),
+        visible:       String(cols[headerMap.visible] || "").toLowerCase() !== "false"
       }));
 
       ensureSelectedProject();
@@ -916,18 +849,10 @@ document.addEventListener("DOMContentLoaded", () => {
     for (let i = 0; i < line.length; i++) {
       const char = line[i];
       const next = line[i + 1];
-
-      if (char === '"' && insideQuotes && next === '"') {
-        current += '"';
-        i++;
-      } else if (char === '"') {
-        insideQuotes = !insideQuotes;
-      } else if (char === "," && !insideQuotes) {
-        result.push(current);
-        current = "";
-      } else {
-        current += char;
-      }
+      if (char === '"' && insideQuotes && next === '"') { current += '"'; i++; }
+      else if (char === '"') { insideQuotes = !insideQuotes; }
+      else if (char === "," && !insideQuotes) { result.push(current); current = ""; }
+      else { current += char; }
     }
 
     result.push(current);
@@ -944,14 +869,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function download(name, text) {
     const blob = new Blob([text], { type: "text/csv;charset=utf-8;" });
-
-    if (navigator.msSaveBlob) {
-      navigator.msSaveBlob(blob, name);
-      return;
-    }
-
     const link = document.createElement("a");
-
     if (link.download !== undefined) {
       const url = URL.createObjectURL(blob);
       link.setAttribute("href", url);
@@ -962,54 +880,69 @@ document.addEventListener("DOMContentLoaded", () => {
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
     } else {
-      const reader = new FileReader();
-      reader.onload = function () {
-        window.open(reader.result);
-      };
-      reader.readAsDataURL(blob);
+      const r = new FileReader();
+      r.onload = () => window.open(r.result);
+      r.readAsDataURL(blob);
     }
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Utility
+  // ─────────────────────────────────────────────────────────────────────────
+
+  function getSelectedProject() {
+    return state.projects.find(p => p.id === selectedProjectId);
+  }
+
+  function normalizeProject(project) {
+    return {
+      id:            project.id           || generateId(),
+      title:         project.title        || "Untitled Project",
+      category:      project.category     || "Uncategorised",
+      description:   project.description  || "",
+      coverImage:    project.coverImage   || "",
+      galleryImages: Array.isArray(project.galleryImages) ? project.galleryImages.filter(Boolean) : [],
+      modalImageFit: project.modalImageFit || "",
+      visible:       project.visible !== false
+    };
+  }
+
+  function generateId() {
+    return "p_" + Math.random().toString(36).slice(2, 11);
+  }
+
+  function mapSliderToSizePreset(value) {
+    const n = Number(value);
+    if (n <= 15) return "small";
+    if (n >= 18) return "large";
+    return "medium";
+  }
+
+  function mapPresetToSliderValue(value) {
+    if (value === "small") return 14;
+    if (value === "large") return 20;
+    return 16;
   }
 
   function showToast(message) {
     const toast = byId("toast");
-    if (!toast) {
-      console.warn(message);
-      return;
-    }
-
+    if (!toast) { console.warn(message); return; }
     toast.textContent = message;
     toast.classList.add("show");
-
     clearTimeout(showToast._timer);
-    showToast._timer = setTimeout(() => {
-      toast.classList.remove("show");
-    }, 2600);
+    showToast._timer = setTimeout(() => toast.classList.remove("show"), 2600);
   }
 
-  function byId(id) {
-    return document.getElementById(id);
-  }
-
-  function setIfExists(id, value) {
-    const el = byId(id);
-    if (el) el.value = value;
-  }
-
-  function setCheckedIfExists(id, value) {
-    const el = byId(id);
-    if (el) el.checked = !!value;
-  }
-
-  function setTextIfExists(id, value) {
-    const el = byId(id);
-    if (el) el.textContent = value;
-  }
+  function byId(id)                { return document.getElementById(id); }
+  function setIfExists(id, value)  { const el = byId(id); if (el) el.value = value; }
+  function setCheckedIfExists(id, value) { const el = byId(id); if (el) el.checked = !!value; }
+  function setTextIfExists(id, value)    { const el = byId(id); if (el) el.textContent = value; }
 
   function hexToRgba(hex, alpha) {
-    const clean = hex.replace("#", "");
+    const clean  = hex.replace("#", "");
     const bigint = parseInt(clean, 16);
     const r = (bigint >> 16) & 255;
-    const g = (bigint >> 8) & 255;
+    const g = (bigint >> 8)  & 255;
     const b = bigint & 255;
     return `rgba(${r}, ${g}, ${b}, ${alpha})`;
   }
@@ -1025,18 +958,5 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function escapeAttr(str) {
     return String(str).replaceAll('"', "&quot;");
-  }
-
-  function mapSliderToSizePreset(value) {
-    const n = Number(value);
-    if (n <= 15) return "small";
-    if (n >= 18) return "large";
-    return "medium";
-  }
-
-  function mapPresetToSliderValue(value) {
-    if (value === "small") return 14;
-    if (value === "large") return 20;
-    return 16;
   }
 });
