@@ -66,6 +66,7 @@ class ProFilterGallery extends HTMLElement {
     this._resizeObserver = null;
     this._sendHeight = null;
     this._eventsBound = false;
+    this._messageHandler = null; // ← tracked for cleanup
   }
 
   static get observedAttributes() {
@@ -284,17 +285,95 @@ class ProFilterGallery extends HTMLElement {
     }
   }
 
+  // ─────────────────────────────────────────────────────────────────────────
+  // Lifecycle
+  // ─────────────────────────────────────────────────────────────────────────
+
   connectedCallback() {
     this.applyInitialAttributes();
     this.render();
     this.bindEvents();
     this.renderCards();
     this.setupAutoHeight();
+    this._bindSettingsMessages(); // ← connects settings panel ↔ widget
   }
 
   disconnectedCallback() {
     if (this._resizeObserver) this._resizeObserver.disconnect();
+    // Clean up message listener to avoid memory leaks
+    if (this._messageHandler) {
+      window.removeEventListener("message", this._messageHandler);
+      this._messageHandler = null;
+    }
   }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Settings Panel ↔ Widget Bridge (postMessage)
+  // ─────────────────────────────────────────────────────────────────────────
+
+  _bindSettingsMessages() {
+    this._messageHandler = (event) => {
+      const data = event.data;
+
+      // Safety check — only handle plain objects with a known type
+      if (!data || typeof data !== "object" || typeof data.type !== "string") return;
+
+      switch (data.type) {
+
+        // Settings panel is sending a single prop update
+        case "SET_PROP": {
+          if (typeof data.key === "string" && data.value !== undefined) {
+            this.setAttribute(data.key, String(data.value));
+          }
+          break;
+        }
+
+        // Settings panel is sending the full state at once (bulk update)
+        case "SET_ALL_PROPS": {
+          if (data.props && typeof data.props === "object") {
+            // Batch all attribute sets before re-rendering
+            const entries = Object.entries(data.props);
+            entries.forEach(([key, value]) => {
+              // Suppress per-attribute re-renders during batch
+              const attrName = key.toLowerCase();
+              if (attrName === "projects") {
+                // Projects need JSON-stringified
+                this.setAttribute("projects", typeof value === "string" ? value : JSON.stringify(value));
+              } else {
+                this.setAttribute(attrName, String(value));
+              }
+            });
+          }
+          break;
+        }
+
+        // Settings panel is asking for the current widget state on load
+        case "GET_STATE": {
+          const reply = {
+            type: "WIDGET_STATE",
+            state: {
+              ...this.config,
+              projects: this.projects
+            }
+          };
+          // Reply to the sender if possible, otherwise parent
+          try {
+            const target = event.source || window.parent;
+            target.postMessage(reply, "*");
+          } catch (e) {
+            window.parent.postMessage(reply, "*");
+          }
+          break;
+        }
+      }
+    };
+
+    window.addEventListener("message", this._messageHandler);
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Attribute helpers
+  // ─────────────────────────────────────────────────────────────────────────
 
   applyInitialAttributes() {
     for (const name of ProFilterGallery.observedAttributes) {
@@ -331,35 +410,30 @@ class ProFilterGallery extends HTMLElement {
   normalizeFontFamily(value) {
     const v = (value || "").trim();
     switch (v.toLowerCase()) {
-      case "inter":
-        return "Inter, Arial, sans-serif";
-      case "arial":
-        return "Arial, sans-serif";
-      case "helvetica":
-        return "Helvetica, Arial, sans-serif";
-      case "georgia":
-        return "Georgia, serif";
-      case "poppins":
-        return "Poppins, Arial, sans-serif";
-      case "montserrat":
-        return "Montserrat, Arial, sans-serif";
-      default:
-        return "Inter, Arial, sans-serif";
+      case "inter":       return "Inter, Arial, sans-serif";
+      case "arial":       return "Arial, sans-serif";
+      case "helvetica":   return "Helvetica, Arial, sans-serif";
+      case "georgia":     return "Georgia, serif";
+      case "poppins":     return "Poppins, Arial, sans-serif";
+      case "montserrat":  return "Montserrat, Arial, sans-serif";
+      default:            return "Inter, Arial, sans-serif";
     }
   }
 
   normalizeImage(value) {
     if (!value) return "";
     if (typeof value === "string") return value;
-
     if (typeof value === "object") {
       if (value.src && typeof value.src === "string") return value.src;
       if (value.url && typeof value.url === "string") return value.url;
       if (value.image && value.image.src && typeof value.image.src === "string") return value.image.src;
     }
-
     return "";
   }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Projects
+  // ─────────────────────────────────────────────────────────────────────────
 
   setProjects(projects) {
     if (!Array.isArray(projects)) {
@@ -368,6 +442,7 @@ class ProFilterGallery extends HTMLElement {
       this.projects = projects.map((project, index) => {
         const coverImage = this.normalizeImage(project.coverImage);
 
+        // Accept both "images" and "galleryImages" — normalise to "images"
         let images = [];
         if (Array.isArray(project.images) && project.images.length) {
           images = project.images.map((img) => this.normalizeImage(img)).filter(Boolean);
@@ -414,133 +489,205 @@ class ProFilterGallery extends HTMLElement {
     }
   }
 
-  getPreviewText(text, maxLength = 88) {
-    if (!text || text.length <= maxLength) return text;
-    const trimmed = text.slice(0, maxLength);
-    const lastSpace = trimmed.lastIndexOf(" ");
-    return (lastSpace > 0 ? trimmed.slice(0, lastSpace) : trimmed).trim();
+  // ─────────────────────────────────────────────────────────────────────────
+  // Render
+  // ─────────────────────────────────────────────────────────────────────────
+
+  render() {
+    this.shadowRoot.innerHTML = this.getTemplate();
+
+    const filtersEl = this.shadowRoot.getElementById("filters");
+    filtersEl.innerHTML = this.filters.map((filter) => `
+      <button class="pfg-filter ${filter === this.activeFilter ? "active" : ""}" data-filter="${filter}">
+        ${filter}
+      </button>
+    `).join("");
   }
 
-  hexToRgb(hex) {
-    if (!hex) return "0,0,0";
-    let normalized = String(hex).replace("#", "").trim();
+  bindEvents() {
+    if (this._eventsBound) return;
+    this._eventsBound = true;
 
-    if (normalized.length === 3) {
-      normalized = normalized.split("").map((c) => c + c).join("");
-    }
+    this.shadowRoot.addEventListener("click", (event) => {
+      const filterBtn = event.target.closest(".pfg-filter");
+      const card      = event.target.closest(".pfg-card");
+      const thumb     = event.target.closest(".pfg-thumb");
+      const closeBtn  = event.target.closest("#modalClose");
 
-    if (normalized.length !== 6) return "0,0,0";
+      if (filterBtn) {
+        this.activeFilter = filterBtn.dataset.filter;
+        this.shadowRoot.querySelectorAll(".pfg-filter").forEach((btn) => {
+          btn.classList.toggle("active", btn.dataset.filter === this.activeFilter);
+        });
+        this.renderCards();
+        return;
+      }
 
-    const bigint = parseInt(normalized, 16);
-    if (Number.isNaN(bigint)) return "0,0,0";
+      if (card && this.config.enableModal) {
+        const id = card.dataset.id;
+        const project = this.projects.find((p) => String(p.id) === String(id));
+        if (project) this.openModal(project);
+        return;
+      }
 
-    const r = (bigint >> 16) & 255;
-    const g = (bigint >> 8) & 255;
-    const b = bigint & 255;
-    return `${r}, ${g}, ${b}`;
+      if (thumb) {
+        this.activeImageIndex = Number(thumb.dataset.index);
+        this.renderModalGallery();
+        return;
+      }
+
+      if (closeBtn) {
+        this.closeModal();
+        return;
+      }
+
+      if (event.target.id === "modalOverlay") {
+        this.closeModal();
+      }
+    });
+
+    this.shadowRoot.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") this.closeModal();
+    });
   }
 
-  getBackgroundCss() {
-    if (!this.config.showBackground) {
-      return "transparent";
-    }
+  renderCards() {
+    const grid = this.shadowRoot.getElementById("grid");
 
-    const bgRgb = this.hexToRgb(this.config.background);
-    const alpha = Math.max(0, Math.min(1, this.config.backgroundOpacity));
-    return `rgba(${bgRgb}, ${alpha})`;
-  }
+    const visibleProjects = this.projects
+      .filter((project) => project.visible !== false)
+      .filter((project) =>
+        this.activeFilter === "All"
+          ? true
+          : String(project.category || "").toLowerCase() === String(this.activeFilter).toLowerCase()
+      )
+      .sort((a, b) => {
+        const ao = typeof a.order === "number" ? a.order : 0;
+        const bo = typeof b.order === "number" ? b.order : 0;
+        return ao - bo;
+      });
 
-  getTitleSizePx() {
-    switch (this.config.titleSize) {
-      case "small":
-        return 13;
-      case "large":
-        return 22;
-      default:
-        return 17;
-    }
-  }
-
-  getMobileTitleSizePx() {
-    switch (this.config.titleSize) {
-      case "small":
-        return 13;
-      case "large":
-        return 20;
-      default:
-        return 16;
-    }
-  }
-
-  getDescSizePx() {
-    switch (this.config.descSize) {
-      case "small":
-        return 11;
-      case "large":
-        return 15;
-      default:
-        return 13;
-    }
-  }
-
-  getMobileDescSizePx() {
-    switch (this.config.descSize) {
-      case "small":
-        return 11;
-      case "large":
-        return 14;
-      default:
-        return 12.5;
-    }
-  }
-
-  getCategorySizePx() {
-    switch (this.config.categorySize) {
-      case "small":
-        return 9;
-      default:
-        return 10;
-    }
-  }
-
-  getMobileCategorySizePx() {
-    switch (this.config.categorySize) {
-      case "small":
-        return 8;
-      default:
-        return 9;
-    }
-  }
-
-  getCardShadow() {
-    return this.config.showShadow
-      ? "0 10px 30px rgba(0,0,0,0.16)"
-      : "none";
-  }
-
-  getCardHoverShadow() {
-    return this.config.showShadow
-      ? "0 20px 44px rgba(0,0,0,0.30)"
-      : "none";
-  }
-
-  getGhostShadow() {
-    return this.config.showShadow
-      ? "0 10px 30px rgba(0,0,0,0.16)"
-      : "none";
-  }
-
-  getContentAlignmentCss() {
-    return this.config.textAlign === "center"
-      ? `
-        text-align: center;
-        align-items: center;
-      `
-      : `
-        text-align: left;
-        align-items: flex-start;
+    if (!visibleProjects.length) {
+      grid.innerHTML = `
+        <div class="pfg-empty">
+          <div class="pfg-empty-ghosts">
+            <div class="pfg-empty-ghost-card">
+              <div class="pfg-empty-ghost-image"></div>
+              <div class="pfg-empty-ghost-body">
+                <div class="pfg-empty-ghost-line short"></div>
+                <div class="pfg-empty-ghost-line title"></div>
+                <div class="pfg-empty-ghost-line text"></div>
+                <div class="pfg-empty-ghost-line text2"></div>
+              </div>
+            </div>
+            <div class="pfg-empty-ghost-card">
+              <div class="pfg-empty-ghost-image"></div>
+              <div class="pfg-empty-ghost-body">
+                <div class="pfg-empty-ghost-line short"></div>
+                <div class="pfg-empty-ghost-line title"></div>
+                <div class="pfg-empty-ghost-line text"></div>
+                <div class="pfg-empty-ghost-line text2"></div>
+              </div>
+            </div>
+            <div class="pfg-empty-ghost-card">
+              <div class="pfg-empty-ghost-image"></div>
+              <div class="pfg-empty-ghost-body">
+                <div class="pfg-empty-ghost-line short"></div>
+                <div class="pfg-empty-ghost-line title"></div>
+                <div class="pfg-empty-ghost-line text"></div>
+                <div class="pfg-empty-ghost-line text2"></div>
+              </div>
+            </div>
+          </div>
+          <div class="pfg-empty-copy">
+            <strong>Your portfolio gallery is ready.</strong>
+            <span>Add your projects to your collection and see your work take shape here.</span>
+          </div>
+        </div>
       `;
+      if (this._sendHeight) this._sendHeight();
+      return;
+    }
+
+    grid.innerHTML = visibleProjects.map((project) => `
+      <article class="pfg-card" data-id="${this.escapeHtml(String(project.id))}">
+        <div class="pfg-image-wrap ${project.coverImage ? "" : "is-empty"}">
+          ${project.coverImage
+            ? `<img class="pfg-image" src="${this.escapeHtml(project.coverImage)}" alt="${this.escapeHtml(project.title)}">`
+            : `<div class="pfg-image-empty"></div>`
+          }
+        </div>
+        <div class="pfg-card-body">
+          <div class="pfg-content">
+            ${this.config.showCategory
+              ? `<div class="pfg-category">${this.escapeHtml(project.category)}</div>`
+              : ``}
+            <h3 class="pfg-title">${this.escapeHtml(project.title)}</h3>
+            ${this.config.showDescription
+              ? `<p class="pfg-description">${this.escapeHtml(this.getPreviewText(project.description, 88))}</p>`
+              : ``}
+            <div class="pfg-mobile-cta">View project →</div>
+          </div>
+        </div>
+      </article>
+    `).join("");
+
+    if (this._sendHeight) this._sendHeight();
   }
+
+  openModal(project) {
+    this.activeProject = project;
+    this.activeImageIndex = 0;
+    this.shadowRoot.getElementById("modalOverlay").classList.add("active");
+    this.renderModalGallery();
+    if (this._sendHeight) this._sendHeight();
+  }
+
+  closeModal() {
+    this.shadowRoot.getElementById("modalOverlay").classList.remove("active");
+    if (this._sendHeight) this._sendHeight();
+  }
+
+  renderModalGallery() {
+    if (!this.activeProject) return;
+
+    const project         = this.activeProject;
+    const mainImage       = this.shadowRoot.getElementById("modalMainImage");
+    const modalCategory   = this.shadowRoot.getElementById("modalCategory");
+    const modalTitle      = this.shadowRoot.getElementById("modalTitle");
+    const modalDescription = this.shadowRoot.getElementById("modalDescription");
+    const modalThumbs     = this.shadowRoot.getElementById("modalThumbs");
+
+    const currentImage =
+      (Array.isArray(project.images) && project.images[this.activeImageIndex]) ||
+      project.coverImage ||
+      "";
+
+    mainImage.src = currentImage;
+    mainImage.alt = project.title;
+
+    const modalFit = project.modalImageFit || this.config.modalImageFit || "cover";
+    mainImage.style.objectFit = modalFit;
+
+    modalCategory.textContent   = project.category;
+    modalTitle.textContent      = project.title;
+    modalDescription.textContent = project.description;
+
+    modalThumbs.innerHTML = (project.images || []).map((img, index) => `
+      <img
+        class="pfg-thumb ${index === this.activeImageIndex ? "active" : ""}"
+        src="${this.escapeHtml(img)}"
+        data-index="${index}"
+        alt="${this.escapeHtml(project.title)} image ${index + 1}"
+      />
+    `).join("");
+
+    if (this._sendHeight) this._sendHeight();
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Auto height (iframe sizing)
+  // ─────────────────────────────────────────────────────────────────────────
 
   setupAutoHeight() {
     const target = this.shadowRoot.querySelector(".pfg-shell");
@@ -552,10 +699,7 @@ class ProFilterGallery extends HTMLElement {
       const shell = this.shadowRoot.querySelector(".pfg-shell");
       if (!shell) return;
       const height = Math.ceil(shell.scrollHeight);
-
-      try {
-        this.style.height = `${height}px`;
-      } catch (e) {}
+      try { this.style.height = `${height}px`; } catch (e) {}
     };
 
     this._resizeObserver = new ResizeObserver(() => sendHeight());
@@ -567,6 +711,108 @@ class ProFilterGallery extends HTMLElement {
     setTimeout(sendHeight, 600);
     setTimeout(sendHeight, 1200);
   }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Style helpers
+  // ─────────────────────────────────────────────────────────────────────────
+
+  getPreviewText(text, maxLength = 88) {
+    if (!text || text.length <= maxLength) return text;
+    const trimmed = text.slice(0, maxLength);
+    const lastSpace = trimmed.lastIndexOf(" ");
+    return (lastSpace > 0 ? trimmed.slice(0, lastSpace) : trimmed).trim();
+  }
+
+  hexToRgb(hex) {
+    if (!hex) return "0,0,0";
+    let normalized = String(hex).replace("#", "").trim();
+    if (normalized.length === 3) normalized = normalized.split("").map((c) => c + c).join("");
+    if (normalized.length !== 6) return "0,0,0";
+    const bigint = parseInt(normalized, 16);
+    if (Number.isNaN(bigint)) return "0,0,0";
+    const r = (bigint >> 16) & 255;
+    const g = (bigint >> 8) & 255;
+    const b = bigint & 255;
+    return `${r}, ${g}, ${b}`;
+  }
+
+  getBackgroundCss() {
+    if (!this.config.showBackground) return "transparent";
+    const bgRgb = this.hexToRgb(this.config.background);
+    const alpha = Math.max(0, Math.min(1, this.config.backgroundOpacity));
+    return `rgba(${bgRgb}, ${alpha})`;
+  }
+
+  getTitleSizePx() {
+    switch (this.config.titleSize) {
+      case "small":  return 13;
+      case "large":  return 22;
+      default:       return 17;
+    }
+  }
+
+  getMobileTitleSizePx() {
+    switch (this.config.titleSize) {
+      case "small":  return 13;
+      case "large":  return 20;
+      default:       return 16;
+    }
+  }
+
+  getDescSizePx() {
+    switch (this.config.descSize) {
+      case "small":  return 11;
+      case "large":  return 15;
+      default:       return 13;
+    }
+  }
+
+  getMobileDescSizePx() {
+    switch (this.config.descSize) {
+      case "small":  return 11;
+      case "large":  return 14;
+      default:       return 12.5;
+    }
+  }
+
+  getCategorySizePx() {
+    return this.config.categorySize === "small" ? 9 : 10;
+  }
+
+  getMobileCategorySizePx() {
+    return this.config.categorySize === "small" ? 8 : 9;
+  }
+
+  getCardShadow() {
+    return this.config.showShadow ? "0 10px 30px rgba(0,0,0,0.16)" : "none";
+  }
+
+  getCardHoverShadow() {
+    return this.config.showShadow ? "0 20px 44px rgba(0,0,0,0.30)" : "none";
+  }
+
+  getGhostShadow() {
+    return this.config.showShadow ? "0 10px 30px rgba(0,0,0,0.16)" : "none";
+  }
+
+  getContentAlignmentCss() {
+    return this.config.textAlign === "center"
+      ? `text-align: center; align-items: center;`
+      : `text-align: left; align-items: flex-start;`;
+  }
+
+  escapeHtml(text) {
+    return String(text)
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#039;");
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Styles & Template
+  // ─────────────────────────────────────────────────────────────────────────
 
   getStyles() {
     return `
@@ -605,9 +851,7 @@ class ProFilterGallery extends HTMLElement {
           scrollbar-width: none;
         }
 
-        .pfg-toolbar::-webkit-scrollbar {
-          display: none;
-        }
+        .pfg-toolbar::-webkit-scrollbar { display: none; }
 
         .pfg-filters {
           display: inline-flex;
@@ -633,9 +877,7 @@ class ProFilterGallery extends HTMLElement {
           flex: 0 0 auto;
         }
 
-        .pfg-filter:hover {
-          transform: translateY(-1px);
-        }
+        .pfg-filter:hover { transform: translateY(-1px); }
 
         .pfg-filter.active {
           background: ${this.config.pillActiveBg};
@@ -697,9 +939,7 @@ class ProFilterGallery extends HTMLElement {
           z-index: 1;
         }
 
-        .pfg-image-wrap.is-empty::after {
-          display: none;
-        }
+        .pfg-image-wrap.is-empty::after { display: none; }
 
         .pfg-image-empty {
           width: 100%;
@@ -790,18 +1030,11 @@ class ProFilterGallery extends HTMLElement {
           position: absolute;
           inset: 0 0 0 auto;
           width: 24%;
-          background: linear-gradient(
-            to right,
-            rgba(16,17,23,0) 0%,
-            rgba(16,17,23,0.14) 46%,
-            rgba(16,17,23,0.95) 100%
-          );
+          background: linear-gradient(to right, rgba(16,17,23,0) 0%, rgba(16,17,23,0.14) 46%, rgba(16,17,23,0.95) 100%);
           pointer-events: none;
         }
 
-        .pfg-mobile-cta {
-          display: none;
-        }
+        .pfg-mobile-cta { display: none; }
 
         .pfg-empty {
           grid-column: 1 / -1;
@@ -881,29 +1114,16 @@ class ProFilterGallery extends HTMLElement {
           };
           box-shadow: ${this.getGhostShadow()};
           opacity: 0.55;
-          transform: translateY(0);
           animation: pfgGhostFloat 5.2s ease-in-out infinite;
         }
 
-        .pfg-empty-ghost-card:nth-child(2) {
-          opacity: 0.82;
-          transform: scale(1.02);
-          animation-delay: 0.5s;
-        }
-
-        .pfg-empty-ghost-card:nth-child(3) {
-          animation-delay: 1s;
-        }
+        .pfg-empty-ghost-card:nth-child(2) { opacity: 0.82; transform: scale(1.02); animation-delay: 0.5s; }
+        .pfg-empty-ghost-card:nth-child(3) { animation-delay: 1s; }
 
         .pfg-empty-ghost-image {
           position: relative;
           height: 58%;
-          background: linear-gradient(
-            110deg,
-            rgba(255,255,255,0.04) 8%,
-            rgba(255,255,255,0.10) 18%,
-            rgba(255,255,255,0.04) 33%
-          );
+          background: linear-gradient(110deg, rgba(255,255,255,0.04) 8%, rgba(255,255,255,0.10) 18%, rgba(255,255,255,0.04) 33%);
           background-size: 200% 100%;
           animation: pfgShimmer 2.4s linear infinite;
         }
@@ -913,12 +1133,7 @@ class ProFilterGallery extends HTMLElement {
           position: absolute;
           inset: auto 0 0 0;
           height: 42%;
-          background: linear-gradient(
-            to bottom,
-            rgba(16,17,23,0) 0%,
-            rgba(16,17,23,0.18) 42%,
-            rgba(16,17,23,0.88) 100%
-          );
+          background: linear-gradient(to bottom, rgba(16,17,23,0) 0%, rgba(16,17,23,0.18) 42%, rgba(16,17,23,0.88) 100%);
         }
 
         .pfg-empty-ghost-body {
@@ -931,60 +1146,29 @@ class ProFilterGallery extends HTMLElement {
         .pfg-empty-ghost-line {
           height: 10px;
           border-radius: 999px;
-          background: linear-gradient(
-            110deg,
-            rgba(255,255,255,0.04) 8%,
-            rgba(255,255,255,0.10) 18%,
-            rgba(255,255,255,0.04) 33%
-          );
+          background: linear-gradient(110deg, rgba(255,255,255,0.04) 8%, rgba(255,255,255,0.10) 18%, rgba(255,255,255,0.04) 33%);
           background-size: 200% 100%;
           animation: pfgShimmer 2.4s linear infinite;
         }
 
-        .pfg-empty-ghost-line.short {
-          width: 38%;
-        }
-
-        .pfg-empty-ghost-line.title {
-          width: 72%;
-          height: 14px;
-        }
-
-        .pfg-empty-ghost-line.text {
-          width: 88%;
-        }
-
-        .pfg-empty-ghost-line.text2 {
-          width: 64%;
-        }
+        .pfg-empty-ghost-line.short  { width: 38%; }
+        .pfg-empty-ghost-line.title  { width: 72%; height: 14px; }
+        .pfg-empty-ghost-line.text   { width: 88%; }
+        .pfg-empty-ghost-line.text2  { width: 64%; }
 
         @keyframes pfgEmptyFadeUp {
-          from {
-            opacity: 0;
-            transform: translateY(10px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
+          from { opacity: 0; transform: translateY(10px); }
+          to   { opacity: 1; transform: translateY(0); }
         }
 
         @keyframes pfgGhostFloat {
-          0%, 100% {
-            transform: translateY(0);
-          }
-          50% {
-            transform: translateY(-6px);
-          }
+          0%, 100% { transform: translateY(0); }
+          50%       { transform: translateY(-6px); }
         }
 
         @keyframes pfgShimmer {
-          0% {
-            background-position: 200% 0;
-          }
-          100% {
-            background-position: -200% 0;
-          }
+          0%   { background-position: 200% 0; }
+          100% { background-position: -200% 0; }
         }
 
         .pfg-modal-overlay {
@@ -999,9 +1183,7 @@ class ProFilterGallery extends HTMLElement {
           z-index: 9999;
         }
 
-        .pfg-modal-overlay.active {
-          display: flex;
-        }
+        .pfg-modal-overlay.active { display: flex; }
 
         .pfg-modal {
           width: min(1120px, 100%);
@@ -1044,9 +1226,7 @@ class ProFilterGallery extends HTMLElement {
           background: #111217;
         }
 
-        .pfg-modal-content {
-          padding: 18px 4px 6px;
-        }
+        .pfg-modal-content { padding: 18px 4px 6px; }
 
         .pfg-modal-category {
           color: ${this.config.categoryColor};
@@ -1086,9 +1266,7 @@ class ProFilterGallery extends HTMLElement {
           scrollbar-width: none;
         }
 
-        .pfg-thumbs::-webkit-scrollbar {
-          display: none;
-        }
+        .pfg-thumbs::-webkit-scrollbar { display: none; }
 
         .pfg-thumb {
           width: 88px;
@@ -1102,39 +1280,20 @@ class ProFilterGallery extends HTMLElement {
           transition: opacity 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
         }
 
-        .pfg-thumb:hover {
-          opacity: 0.95;
-          transform: translateY(-1px);
-        }
-
-        .pfg-thumb.active {
-          opacity: 1;
-          border-color: ${this.config.accent};
-        }
+        .pfg-thumb:hover { opacity: 0.95; transform: translateY(-1px); }
+        .pfg-thumb.active { opacity: 1; border-color: ${this.config.accent}; }
 
         @media (max-width: 1400px) {
-          .pfg-grid {
-            grid-template-columns: repeat(4, minmax(0, 1fr));
-            gap: 22px;
-          }
+          .pfg-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 22px; }
         }
 
         @media (max-width: 1024px) {
-          .pfg-grid {
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-          }
+          .pfg-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
         }
 
         @media (max-width: 767px) {
-          .pfg-shell {
-            padding: 12px 0 22px;
-          }
-
-          .pfg-inner {
-            width: 100%;
-            max-width: 100%;
-            margin: 0 auto;
-          }
+          .pfg-shell { padding: 12px 0 22px; }
+          .pfg-inner { width: 100%; max-width: 100%; margin: 0 auto; }
 
           .pfg-toolbar-wrap {
             position: relative;
@@ -1146,10 +1305,8 @@ class ProFilterGallery extends HTMLElement {
           .pfg-toolbar-wrap::after {
             content: "";
             position: absolute;
-            top: 0;
-            right: 10px;
-            width: 28px;
-            height: 100%;
+            top: 0; right: 10px;
+            width: 28px; height: 100%;
             pointer-events: none;
             z-index: 5;
             background: ${this.config.showBackground
@@ -1157,23 +1314,9 @@ class ProFilterGallery extends HTMLElement {
               : "none"};
           }
 
-          .pfg-toolbar {
-            justify-content: flex-start;
-            overflow-x: auto;
-            overflow-y: hidden;
-            scrollbar-width: none;
-            -webkit-overflow-scrolling: touch;
-          }
-
-          .pfg-toolbar::-webkit-scrollbar {
-            display: none;
-          }
-
-          .pfg-filters {
-            gap: 8px;
-            padding: 2px 40px 2px 0;
-            min-width: max-content;
-          }
+          .pfg-toolbar { justify-content: flex-start; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+          .pfg-toolbar::-webkit-scrollbar { display: none; }
+          .pfg-filters { gap: 8px; padding: 2px 40px 2px 0; min-width: max-content; }
 
           .pfg-filter {
             padding: 9px 14px;
@@ -1185,19 +1328,9 @@ class ProFilterGallery extends HTMLElement {
             color: ${this.config.pillText};
           }
 
-          .pfg-filter.active {
-            background: ${this.config.pillActiveBg};
-            color: ${this.config.pillActiveText};
-            border-color: ${this.config.pillActiveBg};
-          }
+          .pfg-filter.active { background: ${this.config.pillActiveBg}; color: ${this.config.pillActiveText}; border-color: ${this.config.pillActiveBg}; }
 
-          .pfg-grid {
-            grid-template-columns: 1fr;
-            gap: ${this.config.gap}px;
-            width: 100%;
-            margin: 0 auto;
-            padding: 0;
-          }
+          .pfg-grid { grid-template-columns: 1fr; gap: ${this.config.gap}px; width: 100%; margin: 0 auto; padding: 0; }
 
           .pfg-card {
             aspect-ratio: auto;
@@ -1211,46 +1344,14 @@ class ProFilterGallery extends HTMLElement {
             box-shadow: ${this.config.showShadow ? "0 12px 30px rgba(0,0,0,0.18)" : "none"};
           }
 
-          .pfg-image-wrap {
-            width: 100%;
-            height: 150px;
-            flex: none;
-          }
+          .pfg-image-wrap { width: 100%; height: 150px; flex: none; }
+          .pfg-image-wrap::after { height: 38%; }
+          .pfg-image { object-fit: ${this.config.imageFit}; }
+          .pfg-card-body { padding: 14px 14px 16px; background: ${this.config.cardPanelBg}; }
+          .pfg-content { gap: 8px; ${this.getContentAlignmentCss()} }
 
-          .pfg-image-wrap::after {
-            height: 38%;
-          }
-
-          .pfg-image {
-            object-fit: ${this.config.imageFit};
-          }
-
-          .pfg-card-body {
-            padding: 14px 14px 16px;
-            background: ${this.config.cardPanelBg};
-          }
-
-          .pfg-content {
-            gap: 8px;
-            ${this.getContentAlignmentCss()}
-          }
-
-          .pfg-category {
-            font-size: ${this.getMobileCategorySizePx()}px;
-            letter-spacing: 0.13em;
-            color: ${this.config.categoryColor};
-            text-align: ${this.config.textAlign};
-            width: 100%;
-          }
-
-          .pfg-title {
-            font-size: ${this.getMobileTitleSizePx()}px;
-            line-height: 1.15;
-            max-height: unset;
-            color: ${this.config.titleColor};
-            text-align: ${this.config.textAlign};
-            width: 100%;
-          }
+          .pfg-category { font-size: ${this.getMobileCategorySizePx()}px; letter-spacing: 0.13em; color: ${this.config.categoryColor}; text-align: ${this.config.textAlign}; width: 100%; }
+          .pfg-title { font-size: ${this.getMobileTitleSizePx()}px; line-height: 1.15; max-height: unset; color: ${this.config.titleColor}; text-align: ${this.config.textAlign}; width: 100%; }
 
           .pfg-description {
             position: relative;
@@ -1267,87 +1368,24 @@ class ProFilterGallery extends HTMLElement {
           .pfg-description::after {
             content: ${this.config.textAlign === "center" ? "none" : '""'};
             position: absolute;
-            top: 0;
-            right: 0;
-            width: 28%;
-            height: 100%;
-            background: linear-gradient(
-              90deg,
-              rgba(16,17,23,0) 0%,
-              rgba(16,17,23,0.18) 42%,
-              rgba(16,17,23,0.96) 100%
-            );
+            top: 0; right: 0;
+            width: 28%; height: 100%;
+            background: linear-gradient(90deg, rgba(16,17,23,0) 0%, rgba(16,17,23,0.18) 42%, rgba(16,17,23,0.96) 100%);
             pointer-events: none;
           }
 
-          .pfg-empty {
-            min-height: 300px;
-            padding: 22px 16px;
-            background: ${this.config.showBackground ? "rgba(255,255,255,0.02)" : "transparent"};
-            border-radius: ${this.config.radius}px;
-          }
+          .pfg-empty { min-height: 300px; padding: 22px 16px; background: ${this.config.showBackground ? "rgba(255,255,255,0.02)" : "transparent"}; border-radius: ${this.config.radius}px; }
+          .pfg-empty-ghosts { gap: 10px; padding: 18px; }
+          .pfg-empty-ghost-card { width: 120px; height: 160px; min-width: 120px; min-height: 160px; border-radius: ${this.config.radius}px; background: ${this.config.showBackground ? "linear-gradient(180deg, #111217 0%, #0c0d12 100%)" : "linear-gradient(180deg, rgba(17,18,23,0.12) 0%, rgba(12,13,18,0.06) 100%)"}; }
+          .pfg-empty-copy { padding: 20px 16px; background: ${this.config.showBackground ? "rgba(8,10,14,0.66)" : "rgba(8,10,14,0.18)"}; }
+          .pfg-empty-copy strong { font-size: 18px; }
+          .pfg-empty-copy span { font-size: 13px; line-height: 1.55; }
 
-          .pfg-empty-ghosts {
-            gap: 10px;
-            padding: 18px;
-          }
+          .pfg-mobile-cta { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; color: ${this.config.accent}; }
 
-          .pfg-empty-ghost-card {
-            width: 120px;
-            height: 160px;
-            min-width: 120px;
-            min-height: 160px;
-            border-radius: ${this.config.radius}px;
-            background: ${
-              this.config.showBackground
-                ? "linear-gradient(180deg, #111217 0%, #0c0d12 100%)"
-                : "linear-gradient(180deg, rgba(17,18,23,0.12) 0%, rgba(12,13,18,0.06) 100%)"
-            };
-          }
-
-          .pfg-empty-copy {
-            padding: 20px 16px;
-            background: ${this.config.showBackground ? "rgba(8,10,14,0.66)" : "rgba(8,10,14,0.18)"};
-          }
-
-          .pfg-empty-copy strong {
-            font-size: 18px;
-          }
-
-          .pfg-empty-copy span {
-            font-size: 13px;
-            line-height: 1.55;
-          }
-
-          .pfg-mobile-cta {
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            font-size: 12px;
-            font-weight: 700;
-            color: ${this.config.accent};
-          }
-
-          .pfg-modal-overlay {
-            align-items: center;
-            justify-content: center;
-            padding: 14px;
-          }
-
-          .pfg-modal {
-            width: 100%;
-            max-width: 92vw;
-            max-height: 88vh;
-            padding: 14px;
-            border-radius: 22px;
-            background: ${this.config.modalBg};
-          }
-
-          .pfg-close {
-            width: 36px;
-            height: 36px;
-            font-size: 18px;
-          }
+          .pfg-modal-overlay { align-items: center; justify-content: center; padding: 14px; }
+          .pfg-modal { width: 100%; max-width: 92vw; max-height: 88vh; padding: 14px; border-radius: 22px; background: ${this.config.modalBg}; }
+          .pfg-close { width: 36px; height: 36px; font-size: 18px; }
 
           .pfg-modal-image {
             height: min(34vh, 320px);
@@ -1356,36 +1394,11 @@ class ProFilterGallery extends HTMLElement {
             object-fit: ${this.config.modalImageFit || "cover"};
           }
 
-          .pfg-modal-content {
-            padding: 16px 2px 8px;
-          }
-
-          .pfg-modal-category {
-            font-size: 10px;
-            margin-bottom: 8px;
-            color: ${this.config.categoryColor};
-            text-align: ${this.config.textAlign};
-          }
-
-          .pfg-modal-title {
-            font-size: 24px;
-            margin-bottom: 10px;
-            color: ${this.config.modalTitleColor};
-            text-align: ${this.config.textAlign};
-          }
-
-          .pfg-modal-description {
-            font-size: 13px;
-            line-height: 1.5;
-            color: ${this.config.modalDescColor};
-            text-align: ${this.config.textAlign};
-          }
-
-          .pfg-thumb {
-            width: 64px;
-            height: 64px;
-            border-radius: 10px;
-          }
+          .pfg-modal-content { padding: 16px 2px 8px; }
+          .pfg-modal-category { font-size: 10px; margin-bottom: 8px; color: ${this.config.categoryColor}; text-align: ${this.config.textAlign}; }
+          .pfg-modal-title { font-size: 24px; margin-bottom: 10px; color: ${this.config.modalTitleColor}; text-align: ${this.config.textAlign}; }
+          .pfg-modal-description { font-size: 13px; line-height: 1.5; color: ${this.config.modalDescColor}; text-align: ${this.config.textAlign}; }
+          .pfg-thumb { width: 64px; height: 64px; border-radius: 10px; }
         }
       </style>
     `;
@@ -1418,210 +1431,6 @@ class ProFilterGallery extends HTMLElement {
         </div>
       </div>
     `;
-  }
-
-  render() {
-    this.shadowRoot.innerHTML = this.getTemplate();
-
-    const filtersEl = this.shadowRoot.getElementById("filters");
-    filtersEl.innerHTML = this.filters.map((filter) => `
-      <button class="pfg-filter ${filter === this.activeFilter ? "active" : ""}" data-filter="${filter}">
-        ${filter}
-      </button>
-    `).join("");
-  }
-
-  bindEvents() {
-    if (this._eventsBound) return;
-    this._eventsBound = true;
-
-    this.shadowRoot.addEventListener("click", (event) => {
-      const filterBtn = event.target.closest(".pfg-filter");
-      const card = event.target.closest(".pfg-card");
-      const thumb = event.target.closest(".pfg-thumb");
-      const closeBtn = event.target.closest("#modalClose");
-
-      if (filterBtn) {
-        this.activeFilter = filterBtn.dataset.filter;
-        this.shadowRoot.querySelectorAll(".pfg-filter").forEach((btn) => {
-          btn.classList.toggle("active", btn.dataset.filter === this.activeFilter);
-        });
-        this.renderCards();
-        return;
-      }
-
-      if (card && this.config.enableModal) {
-        const id = card.dataset.id;
-        const project = this.projects.find((p) => String(p.id) === String(id));
-        if (project) this.openModal(project);
-        return;
-      }
-
-      if (thumb) {
-        this.activeImageIndex = Number(thumb.dataset.index);
-        this.renderModalGallery();
-        return;
-      }
-
-      if (closeBtn) {
-        this.closeModal();
-        return;
-      }
-
-      if (event.target.id === "modalOverlay") {
-        this.closeModal();
-      }
-    });
-
-    this.shadowRoot.addEventListener("keydown", (e) => {
-      if (e.key === "Escape") this.closeModal();
-    });
-  }
-
-  renderCards() {
-    const grid = this.shadowRoot.getElementById("grid");
-
-    const visibleProjects = this.projects
-      .filter((project) => project.visible !== false)
-      .filter((project) =>
-        this.activeFilter === "All"
-          ? true
-          : String(project.category || "").toLowerCase() === String(this.activeFilter).toLowerCase()
-      )
-      .sort((a, b) => {
-        const ao = typeof a.order === "number" ? a.order : 0;
-        const bo = typeof b.order === "number" ? b.order : 0;
-        return ao - bo;
-      });
-
-    if (!visibleProjects.length) {
-      grid.innerHTML = `
-        <div class="pfg-empty">
-          <div class="pfg-empty-ghosts">
-            <div class="pfg-empty-ghost-card">
-              <div class="pfg-empty-ghost-image"></div>
-              <div class="pfg-empty-ghost-body">
-                <div class="pfg-empty-ghost-line short"></div>
-                <div class="pfg-empty-ghost-line title"></div>
-                <div class="pfg-empty-ghost-line text"></div>
-                <div class="pfg-empty-ghost-line text2"></div>
-              </div>
-            </div>
-
-            <div class="pfg-empty-ghost-card">
-              <div class="pfg-empty-ghost-image"></div>
-              <div class="pfg-empty-ghost-body">
-                <div class="pfg-empty-ghost-line short"></div>
-                <div class="pfg-empty-ghost-line title"></div>
-                <div class="pfg-empty-ghost-line text"></div>
-                <div class="pfg-empty-ghost-line text2"></div>
-              </div>
-            </div>
-
-            <div class="pfg-empty-ghost-card">
-              <div class="pfg-empty-ghost-image"></div>
-              <div class="pfg-empty-ghost-body">
-                <div class="pfg-empty-ghost-line short"></div>
-                <div class="pfg-empty-ghost-line title"></div>
-                <div class="pfg-empty-ghost-line text"></div>
-                <div class="pfg-empty-ghost-line text2"></div>
-              </div>
-            </div>
-          </div>
-
-          <div class="pfg-empty-copy">
-            <strong>Your portfolio gallery is ready.</strong>
-            <span>Add your projects to your collection and see your work take shape here.</span>
-          </div>
-        </div>
-      `;
-      if (this._sendHeight) this._sendHeight();
-      return;
-    }
-
-    grid.innerHTML = visibleProjects.map((project) => `
-      <article class="pfg-card" data-id="${this.escapeHtml(String(project.id))}">
-        <div class="pfg-image-wrap ${project.coverImage ? "" : "is-empty"}">
-          ${project.coverImage
-            ? `<img class="pfg-image" src="${this.escapeHtml(project.coverImage)}" alt="${this.escapeHtml(project.title)}">`
-            : `<div class="pfg-image-empty"></div>`
-          }
-        </div>
-        <div class="pfg-card-body">
-          <div class="pfg-content">
-            ${this.config.showCategory
-              ? `<div class="pfg-category">${this.escapeHtml(project.category)}</div>`
-              : ``}
-            <h3 class="pfg-title">${this.escapeHtml(project.title)}</h3>
-            ${this.config.showDescription
-              ? `<p class="pfg-description">${this.escapeHtml(this.getPreviewText(project.description, 88))}</p>`
-              : ``}
-            <div class="pfg-mobile-cta">View project →</div>
-          </div>
-        </div>
-      </article>
-    `).join("");
-
-    if (this._sendHeight) this._sendHeight();
-  }
-
-  openModal(project) {
-    this.activeProject = project;
-    this.activeImageIndex = 0;
-    this.shadowRoot.getElementById("modalOverlay").classList.add("active");
-    this.renderModalGallery();
-    if (this._sendHeight) this._sendHeight();
-  }
-
-  closeModal() {
-    this.shadowRoot.getElementById("modalOverlay").classList.remove("active");
-    if (this._sendHeight) this._sendHeight();
-  }
-
-  renderModalGallery() {
-    if (!this.activeProject) return;
-
-    const project = this.activeProject;
-    const mainImage = this.shadowRoot.getElementById("modalMainImage");
-    const modalCategory = this.shadowRoot.getElementById("modalCategory");
-    const modalTitle = this.shadowRoot.getElementById("modalTitle");
-    const modalDescription = this.shadowRoot.getElementById("modalDescription");
-    const modalThumbs = this.shadowRoot.getElementById("modalThumbs");
-
-    const currentImage =
-      (Array.isArray(project.images) && project.images[this.activeImageIndex]) ||
-      project.coverImage ||
-      "";
-
-    mainImage.src = currentImage;
-    mainImage.alt = project.title;
-
-    const modalFit = project.modalImageFit || this.config.modalImageFit || "cover";
-    mainImage.style.objectFit = modalFit;
-
-    modalCategory.textContent = project.category;
-    modalTitle.textContent = project.title;
-    modalDescription.textContent = project.description;
-
-    modalThumbs.innerHTML = (project.images || []).map((img, index) => `
-      <img
-        class="pfg-thumb ${index === this.activeImageIndex ? "active" : ""}"
-        src="${this.escapeHtml(img)}"
-        data-index="${index}"
-        alt="${this.escapeHtml(project.title)} image ${index + 1}"
-      />
-    `).join("");
-
-    if (this._sendHeight) this._sendHeight();
-  }
-
-  escapeHtml(text) {
-    return String(text)
-      .replaceAll("&", "&amp;")
-      .replaceAll("<", "&lt;")
-      .replaceAll(">", "&gt;")
-      .replaceAll('"', "&quot;")
-      .replaceAll("'", "&#039;");
   }
 }
 
