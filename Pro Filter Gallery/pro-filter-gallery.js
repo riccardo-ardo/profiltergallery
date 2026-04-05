@@ -66,7 +66,6 @@ class ProFilterGallery extends HTMLElement {
     this._resizeObserver = null;
     this._sendHeight = null;
     this._eventsBound = false;
-    this._messageHandler = null; // ← tracked for cleanup
   }
 
   static get observedAttributes() {
@@ -295,80 +294,10 @@ class ProFilterGallery extends HTMLElement {
     this.bindEvents();
     this.renderCards();
     this.setupAutoHeight();
-    this._bindSettingsMessages(); // ← connects settings panel ↔ widget
   }
 
   disconnectedCallback() {
     if (this._resizeObserver) this._resizeObserver.disconnect();
-    // Clean up message listener to avoid memory leaks
-    if (this._messageHandler) {
-      window.removeEventListener("message", this._messageHandler);
-      this._messageHandler = null;
-    }
-  }
-
-  // ─────────────────────────────────────────────────────────────────────────
-  // Settings Panel ↔ Widget Bridge (postMessage)
-  // ─────────────────────────────────────────────────────────────────────────
-
-  _bindSettingsMessages() {
-    this._messageHandler = (event) => {
-      const data = event.data;
-
-      // Safety check — only handle plain objects with a known type
-      if (!data || typeof data !== "object" || typeof data.type !== "string") return;
-
-      switch (data.type) {
-
-        // Settings panel is sending a single prop update
-        case "SET_PROP": {
-          if (typeof data.key === "string" && data.value !== undefined) {
-            this.setAttribute(data.key, String(data.value));
-          }
-          break;
-        }
-
-        // Settings panel is sending the full state at once (bulk update)
-        case "SET_ALL_PROPS": {
-          if (data.props && typeof data.props === "object") {
-            // Batch all attribute sets before re-rendering
-            const entries = Object.entries(data.props);
-            entries.forEach(([key, value]) => {
-              // Suppress per-attribute re-renders during batch
-              const attrName = key.toLowerCase();
-              if (attrName === "projects") {
-                // Projects need JSON-stringified
-                this.setAttribute("projects", typeof value === "string" ? value : JSON.stringify(value));
-              } else {
-                this.setAttribute(attrName, String(value));
-              }
-            });
-          }
-          break;
-        }
-
-        // Settings panel is asking for the current widget state on load
-        case "GET_STATE": {
-          const reply = {
-            type: "WIDGET_STATE",
-            state: {
-              ...this.config,
-              projects: this.projects
-            }
-          };
-          // Reply to the sender if possible, otherwise parent
-          try {
-            const target = event.source || window.parent;
-            target.postMessage(reply, "*");
-          } catch (e) {
-            window.parent.postMessage(reply, "*");
-          }
-          break;
-        }
-      }
-    };
-
-    window.addEventListener("message", this._messageHandler);
   }
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -410,13 +339,13 @@ class ProFilterGallery extends HTMLElement {
   normalizeFontFamily(value) {
     const v = (value || "").trim();
     switch (v.toLowerCase()) {
-      case "inter":       return "Inter, Arial, sans-serif";
-      case "arial":       return "Arial, sans-serif";
-      case "helvetica":   return "Helvetica, Arial, sans-serif";
-      case "georgia":     return "Georgia, serif";
-      case "poppins":     return "Poppins, Arial, sans-serif";
-      case "montserrat":  return "Montserrat, Arial, sans-serif";
-      default:            return "Inter, Arial, sans-serif";
+      case "inter": return "Inter, Arial, sans-serif";
+      case "arial": return "Arial, sans-serif";
+      case "helvetica": return "Helvetica, Arial, sans-serif";
+      case "georgia": return "Georgia, serif";
+      case "poppins": return "Poppins, Arial, sans-serif";
+      case "montserrat": return "Montserrat, Arial, sans-serif";
+      default: return "Inter, Arial, sans-serif";
     }
   }
 
@@ -442,7 +371,6 @@ class ProFilterGallery extends HTMLElement {
       this.projects = projects.map((project, index) => {
         const coverImage = this.normalizeImage(project.coverImage);
 
-        // Accept both "images" and "galleryImages" — normalise to "images"
         let images = [];
         if (Array.isArray(project.images) && project.images.length) {
           images = project.images.map((img) => this.normalizeImage(img)).filter(Boolean);
@@ -510,9 +438,9 @@ class ProFilterGallery extends HTMLElement {
 
     this.shadowRoot.addEventListener("click", (event) => {
       const filterBtn = event.target.closest(".pfg-filter");
-      const card      = event.target.closest(".pfg-card");
-      const thumb     = event.target.closest(".pfg-thumb");
-      const closeBtn  = event.target.closest("#modalClose");
+      const card = event.target.closest(".pfg-card");
+      const thumb = event.target.closest(".pfg-thumb");
+      const closeBtn = event.target.closest("#modalClose");
 
       if (filterBtn) {
         this.activeFilter = filterBtn.dataset.filter;
@@ -553,6 +481,7 @@ class ProFilterGallery extends HTMLElement {
 
   renderCards() {
     const grid = this.shadowRoot.getElementById("grid");
+    if (!grid) return;
 
     const visibleProjects = this.projects
       .filter((project) => project.visible !== false)
@@ -638,25 +567,33 @@ class ProFilterGallery extends HTMLElement {
   openModal(project) {
     this.activeProject = project;
     this.activeImageIndex = 0;
-    this.shadowRoot.getElementById("modalOverlay").classList.add("active");
+    const overlay = this.shadowRoot.getElementById("modalOverlay");
+    if (!overlay) return;
+    overlay.classList.add("active");
     this.renderModalGallery();
     if (this._sendHeight) this._sendHeight();
   }
 
   closeModal() {
-    this.shadowRoot.getElementById("modalOverlay").classList.remove("active");
+    const overlay = this.shadowRoot.getElementById("modalOverlay");
+    if (!overlay) return;
+    overlay.classList.remove("active");
     if (this._sendHeight) this._sendHeight();
   }
 
   renderModalGallery() {
     if (!this.activeProject) return;
 
-    const project         = this.activeProject;
-    const mainImage       = this.shadowRoot.getElementById("modalMainImage");
-    const modalCategory   = this.shadowRoot.getElementById("modalCategory");
-    const modalTitle      = this.shadowRoot.getElementById("modalTitle");
+    const project = this.activeProject;
+    const mainImage = this.shadowRoot.getElementById("modalMainImage");
+    const modalCategory = this.shadowRoot.getElementById("modalCategory");
+    const modalTitle = this.shadowRoot.getElementById("modalTitle");
     const modalDescription = this.shadowRoot.getElementById("modalDescription");
-    const modalThumbs     = this.shadowRoot.getElementById("modalThumbs");
+    const modalThumbs = this.shadowRoot.getElementById("modalThumbs");
+
+    if (!mainImage || !modalCategory || !modalTitle || !modalDescription || !modalThumbs) {
+      return;
+    }
 
     const currentImage =
       (Array.isArray(project.images) && project.images[this.activeImageIndex]) ||
@@ -669,8 +606,8 @@ class ProFilterGallery extends HTMLElement {
     const modalFit = project.modalImageFit || this.config.modalImageFit || "cover";
     mainImage.style.objectFit = modalFit;
 
-    modalCategory.textContent   = project.category;
-    modalTitle.textContent      = project.title;
+    modalCategory.textContent = project.category;
+    modalTitle.textContent = project.title;
     modalDescription.textContent = project.description;
 
     modalThumbs.innerHTML = (project.images || []).map((img, index) => `
@@ -686,7 +623,7 @@ class ProFilterGallery extends HTMLElement {
   }
 
   // ─────────────────────────────────────────────────────────────────────────
-  // Auto height (iframe sizing)
+  // Auto height
   // ─────────────────────────────────────────────────────────────────────────
 
   setupAutoHeight() {
@@ -699,7 +636,9 @@ class ProFilterGallery extends HTMLElement {
       const shell = this.shadowRoot.querySelector(".pfg-shell");
       if (!shell) return;
       const height = Math.ceil(shell.scrollHeight);
-      try { this.style.height = `${height}px`; } catch (e) {}
+      try {
+        this.style.height = `${height}px`;
+      } catch (e) {}
     };
 
     this._resizeObserver = new ResizeObserver(() => sendHeight());
@@ -745,33 +684,33 @@ class ProFilterGallery extends HTMLElement {
 
   getTitleSizePx() {
     switch (this.config.titleSize) {
-      case "small":  return 13;
-      case "large":  return 22;
-      default:       return 17;
+      case "small": return 13;
+      case "large": return 22;
+      default: return 17;
     }
   }
 
   getMobileTitleSizePx() {
     switch (this.config.titleSize) {
-      case "small":  return 13;
-      case "large":  return 20;
-      default:       return 16;
+      case "small": return 13;
+      case "large": return 20;
+      default: return 16;
     }
   }
 
   getDescSizePx() {
     switch (this.config.descSize) {
-      case "small":  return 11;
-      case "large":  return 15;
-      default:       return 13;
+      case "small": return 11;
+      case "large": return 15;
+      default: return 13;
     }
   }
 
   getMobileDescSizePx() {
     switch (this.config.descSize) {
-      case "small":  return 11;
-      case "large":  return 14;
-      default:       return 12.5;
+      case "small": return 11;
+      case "large": return 14;
+      default: return 12.5;
     }
   }
 
@@ -1163,11 +1102,11 @@ class ProFilterGallery extends HTMLElement {
 
         @keyframes pfgGhostFloat {
           0%, 100% { transform: translateY(0); }
-          50%       { transform: translateY(-6px); }
+          50% { transform: translateY(-6px); }
         }
 
         @keyframes pfgShimmer {
-          0%   { background-position: 200% 0; }
+          0% { background-position: 200% 0; }
           100% { background-position: -200% 0; }
         }
 
@@ -1434,4 +1373,6 @@ class ProFilterGallery extends HTMLElement {
   }
 }
 
-customElements.define("pro-filter-gallery", ProFilterGallery);
+if (!customElements.get("pro-filter-gallery")) {
+  customElements.define("pro-filter-gallery", ProFilterGallery);
+}
