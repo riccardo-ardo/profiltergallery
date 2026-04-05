@@ -171,31 +171,36 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
   }
 
-  async function hydrateStateFromWix() {
-    isHydrating = true;
+async function hydrateStateFromWix() {
+  isHydrating = true;
 
-try {
-  const propEntries = await Promise.all(
-    WIDGET_PROP_KEYS.map(async (key) => [key, await getProp(key)])
-  );
+  try {
+    const propEntries = await Promise.all(
+      WIDGET_PROP_KEYS.map(async (key) => [key, await getProp(key)])
+    );
 
-  const props = Object.fromEntries(propEntries);
+    const props = Object.fromEntries(propEntries);
 
-  // 🔥 THIS WAS MISSING — STATE NEVER SET
-  state = buildStateFromProps(props);
+    state = buildStateFromProps(props);
 
-  // 🔥 ENSURE PROJECTS ALWAYS EXIST
-  if (!Array.isArray(state.projects) || state.projects.length === 0) {
-    console.log(`${LOG_PREFIX} No projects found — bootstrapping defaults`);
-    state.projects = cloneState(DEFAULT_STATE.projects);
-    await persistFullState({ silent: true, reason: "bootstrap-projects" });
+    const hasStoredProjects =
+      props.projects !== null &&
+      props.projects !== undefined &&
+      props.projects !== "" &&
+      props.projects !== "[]" &&
+      props.projects !== "null";
+
+    if (!hasStoredProjects) {
+      console.log(`${LOG_PREFIX} No stored projects found. Bootstrapping defaults into Wix.`);
+      state = cloneState(DEFAULT_STATE);
+      await persistFullState({ silent: true, reason: "bootstrap-default-projects" });
+    }
+  } catch (error) {
+    console.error(`${LOG_PREFIX} Failed to hydrate state from Wix. Falling back to defaults.`, error);
+    state = cloneState(DEFAULT_STATE);
+  } finally {
+    isHydrating = false;
   }
-
-} catch (error) {
-  console.error(`${LOG_PREFIX} Failed to hydrate state from Wix. Falling back to defaults.`, error);
-  state = cloneState(DEFAULT_STATE);
-} finally {
-  isHydrating = false;
 }
 
   function buildStateFromProps(props) {
