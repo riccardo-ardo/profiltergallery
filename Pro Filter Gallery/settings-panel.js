@@ -179,20 +179,13 @@ document.addEventListener("DOMContentLoaded", async () => {
         WIDGET_PROP_KEYS.map(async (key) => [key, await getProp(key)])
       );
 
-      const props = Object.fromEntries(propEntries);
-      console.log(`${LOG_PREFIX} Loaded widget props:`, props);
-
-      state = buildStateFromProps(props);
-
-      const hasAnyStoredProp = WIDGET_PROP_KEYS.some((key) => {
-        const value = props[key];
-        return value !== null && value !== undefined && value !== "";
-      });
-
-      if (!hasAnyStoredProp) {
-        console.log(`${LOG_PREFIX} No stored widget props found. Bootstrapping defaults into Wix.`);
-        await persistFullState({ silent: true, reason: "bootstrap-empty-widget" });
-      }
+       } catch (error) {
+      console.error(`${LOG_PREFIX} Failed to hydrate state from Wix. Falling back to defaults.`, error);
+      state = cloneState(DEFAULT_STATE);
+    } finally {
+      isHydrating = false;
+    }
+  }
     } catch (error) {
       console.error(`${LOG_PREFIX} Failed to hydrate state from Wix. Falling back to defaults.`, error);
       state = cloneState(DEFAULT_STATE);
