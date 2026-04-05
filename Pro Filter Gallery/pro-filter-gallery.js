@@ -278,10 +278,13 @@ class ProFilterGallery extends HTMLElement {
     }
 
     if (this.isConnected) {
-      this.render();
-      this.renderCards();
-      if (this._sendHeight) this._sendHeight();
-    }
+  // 🔥 FORCE FULL RE-SYNC
+  this.applyInitialAttributes();
+
+  this.render();
+  this.renderCards();
+  if (this._sendHeight) this._sendHeight();
+}
   }
 
   // ─────────────────────────────────────────────────────────────────────────
