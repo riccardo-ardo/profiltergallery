@@ -1,8 +1,20 @@
-document.addEventListener("DOMContentLoaded", () => {
+/**
+ * Pro Filter Gallery — Settings Panel
+ *
+ * Official Wix flow:
+ * settings panel -> widget.setProp() -> Wix -> custom element attributes -> attributeChangedCallback()
+ *
+ * No postMessage. No custom bridge. Wix is the source of truth.
+ */
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // Defaults
-  // ─────────────────────────────────────────────────────────────────────────
+document.addEventListener("DOMContentLoaded", async () => {
+  const LOG_PREFIX = "[ProFilterGallery]";
+  const MAX_PROJECTS_JSON_SIZE = 40000;
+
+  let widget = null;
+  let isWixEditor = false;
+  let isHydrating = false;
+  let persistQueue = Promise.resolve();
 
   const DEFAULT_DESIGN = {
     columns: 3,
@@ -61,206 +73,312 @@ document.addEventListener("DOMContentLoaded", () => {
     ]
   };
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // Runtime state
-  // ─────────────────────────────────────────────────────────────────────────
+  const WIDGET_PROP_KEYS = [
+    "projects",
+    "accent",
+    "columns",
+    "gap",
+    "radius",
+    "cardpanelbg",
+    "textpanelstyle",
+    "overlaystrength",
+    "showcategory",
+    "showfilters",
+    "enablemodal",
+    "titlesize",
+    "descsize",
+    "categorysize",
+    "modalimagefit"
+  ];
 
-  let state = structuredClone(DEFAULT_STATE);
+  let state = cloneState(DEFAULT_STATE);
   let selectedProjectId = null;
   let activeView = "hub";
-  let saveTimeout = null;
-  let _widgetStateReceived = false; // tracks whether widget replied to GET_STATE
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // postMessage bridge — replaces Wix.getProp / Wix.setProp
-  // ─────────────────────────────────────────────────────────────────────────
+  await initWixEditorSDK();
+  await hydrateStateFromWix();
 
-  /**
-   * Send a single prop update to the widget.
-   * The widget's _bindSettingsMessages() listener picks this up and calls
-   * this.setAttribute(key, value), which triggers attributeChangedCallback.
-   */
-  function setProp(key, value) {
-    window.parent.postMessage(
-      { type: "SET_PROP", key, value: String(value) },
-      "*"
-    );
-  }
+  ensureSelectedProject();
 
-  /**
-   * Send the full state to the widget in one batch.
-   * More efficient than 15 individual setProp calls.
-   */
-  function setAllProps(props) {
-    window.parent.postMessage(
-      { type: "SET_ALL_PROPS", props },
-      "*"
-    );
-  }
+  wireNavigation();
+  wireActions();
+  wireEditorFields();
+  wireDesignControls();
+  wireResponsivePreview();
 
-  /**
-   * Ask the widget to send its current state back.
-   * The widget replies with { type: "WIDGET_STATE", state: {...} }.
-   * We wait up to 600ms; if no reply, fall back to DEFAULT_STATE.
-   */
-  function requestWidgetState() {
-    return new Promise((resolve) => {
-      const timeout = setTimeout(() => {
-        // Widget didn't reply in time — use defaults
-        resolve(null);
-      }, 600);
+  setView(getInitialView());
+  renderAll();
 
-      const handler = (event) => {
-        if (event.data?.type === "WIDGET_STATE") {
-          clearTimeout(timeout);
-          window.removeEventListener("message", handler);
-          resolve(event.data.state);
+  async function initWixEditorSDK() {
+    try {
+      console.log(`${LOG_PREFIX} Initialising Wix Editor SDK...`);
+
+      const sdkModule = await import("https://www.wix.com/sdk-init/sdk-init.js");
+      const createClient =
+        sdkModule?.createClient ||
+        sdkModule?.default?.createClient;
+
+      const editorModule =
+        sdkModule?.editor ||
+        sdkModule?.default?.editor;
+
+      if (!createClient || !editorModule?.widget) {
+        throw new Error("Wix SDK loaded but widget module was not found.");
+      }
+
+      const client = createClient({
+        modules: {
+          widget: editorModule.widget
         }
-      };
+      });
 
-      window.addEventListener("message", handler);
-      window.parent.postMessage({ type: "GET_STATE" }, "*");
+      if (!client?.widget) {
+        throw new Error("Wix client initialised but widget API is unavailable.");
+      }
+
+      widget = client.widget;
+      isWixEditor = true;
+
+      console.log(`${LOG_PREFIX} Wix Editor SDK ready.`);
+    } catch (error) {
+      widget = null;
+      isWixEditor = false;
+      console.warn(`${LOG_PREFIX} Wix Editor SDK unavailable. Running in local/dev mode.`, error);
+    }
+  }
+
+  async function getProp(key) {
+    if (!widget) return null;
+    try {
+      const value = await widget.getProp(key);
+      console.log(`${LOG_PREFIX} getProp("${key}") ->`, value);
+      return value ?? null;
+    } catch (error) {
+      console.warn(`${LOG_PREFIX} getProp failed for "${key}"`, error);
+      return null;
+    }
+  }
+
+  async function setProp(key, value) {
+    if (!widget) return false;
+    try {
+      await widget.setProp(key, String(value));
+      console.log(`${LOG_PREFIX} setProp("${key}") <-`, value);
+      return true;
+    } catch (error) {
+      console.warn(`${LOG_PREFIX} setProp failed for "${key}"`, error);
+      return false;
+    }
+  }
+
+  async function hydrateStateFromWix() {
+    isHydrating = true;
+
+    try {
+      const propEntries = await Promise.all(
+        WIDGET_PROP_KEYS.map(async (key) => [key, await getProp(key)])
+      );
+
+      const props = Object.fromEntries(propEntries);
+      console.log(`${LOG_PREFIX} Loaded widget props:`, props);
+
+      state = buildStateFromProps(props);
+
+      const hasAnyStoredProp = WIDGET_PROP_KEYS.some((key) => {
+        const value = props[key];
+        return value !== null && value !== undefined && value !== "";
+      });
+
+      if (!hasAnyStoredProp) {
+        console.log(`${LOG_PREFIX} No stored widget props found. Bootstrapping defaults into Wix.`);
+        await persistFullState({ silent: true, reason: "bootstrap-empty-widget" });
+      }
+    } catch (error) {
+      console.error(`${LOG_PREFIX} Failed to hydrate state from Wix. Falling back to defaults.`, error);
+      state = cloneState(DEFAULT_STATE);
+    } finally {
+      isHydrating = false;
+    }
+  }
+
+  function buildStateFromProps(props) {
+    const nextState = cloneState(DEFAULT_STATE);
+    const d = nextState.design;
+
+    if (props.projects) {
+      try {
+        const parsed = JSON.parse(props.projects);
+        if (Array.isArray(parsed) && parsed.length) {
+          nextState.projects = parsed.map(normalizeProject);
+        }
+      } catch (error) {
+        console.warn(`${LOG_PREFIX} Could not parse projects prop. Using defaults.`, error);
+      }
+    }
+
+    if (props.accent) d.accentColor = props.accent;
+
+    if (props.columns !== null && props.columns !== "") {
+      d.columns = parseNumber(props.columns, DEFAULT_DESIGN.columns);
+    }
+
+    if (props.gap !== null && props.gap !== "") {
+      d.cardGap = parseNumber(props.gap, DEFAULT_DESIGN.cardGap);
+    }
+
+    if (props.radius !== null && props.radius !== "") {
+      d.cardRadius = parseNumber(props.radius, DEFAULT_DESIGN.cardRadius);
+    }
+
+    if (props.cardpanelbg) d.cardBackground = props.cardpanelbg;
+    if (props.textpanelstyle) d.textPanelStyle = props.textpanelstyle;
+
+    if (props.overlaystrength !== null && props.overlaystrength !== "") {
+      d.overlayStrength = parseNumber(props.overlaystrength, DEFAULT_DESIGN.overlayStrength);
+    }
+
+    if (typeof props.showcategory === "string") {
+      d.showCategory = props.showcategory === "true";
+    }
+
+    if (typeof props.showfilters === "string") {
+      d.showFilters = props.showfilters === "true";
+    }
+
+    if (typeof props.enablemodal === "string") {
+      d.enableModal = props.enablemodal === "true";
+    }
+
+    if (props.titlesize) {
+      d.titleSize = mapPresetToSliderValue(props.titlesize);
+    }
+
+    if (props.descsize) {
+      d.metaSize = mapPresetToSliderValue(props.descsize);
+    } else if (props.categorysize === "small") {
+      d.metaSize = 10;
+    } else if (props.categorysize === "medium") {
+      d.metaSize = 12;
+    }
+
+    if (props.modalimagefit) {
+      d.modalImageFit = props.modalimagefit;
+    }
+
+    return nextState;
+  }
+
+  function buildPropPayload(sourceState = state) {
+    return {
+      projects: JSON.stringify(sourceState.projects),
+      accent: String(sourceState.design.accentColor || "#7c9cff"),
+      columns: String(sourceState.design.columns ?? 3),
+      gap: String(sourceState.design.cardGap ?? 16),
+      radius: String(sourceState.design.cardRadius ?? 20),
+      cardpanelbg: String(sourceState.design.cardBackground || "#111722"),
+      textpanelstyle: String(sourceState.design.textPanelStyle || "fade"),
+      overlaystrength: String(sourceState.design.overlayStrength ?? 72),
+      showcategory: String(!!sourceState.design.showCategory),
+      showfilters: String(!!sourceState.design.showFilters),
+      enablemodal: String(!!sourceState.design.enableModal),
+      titlesize: mapSliderToSizePreset(sourceState.design.titleSize),
+      descsize: mapSliderToSizePreset(sourceState.design.metaSize),
+      categorysize: Number(sourceState.design.metaSize) <= 10 ? "small" : "medium",
+      modalimagefit: String(sourceState.design.modalImageFit || "cover")
+    };
+  }
+
+  function validateProjectsSize(projectsJson, { silent = false } = {}) {
+    if (projectsJson.length <= MAX_PROJECTS_JSON_SIZE) return true;
+
+    console.warn(
+      `${LOG_PREFIX} Projects JSON exceeded size limit (${projectsJson.length}/${MAX_PROJECTS_JSON_SIZE}).`
+    );
+
+    if (!silent) {
+      showToast("Projects are too large to save. Use image URLs only.");
+    }
+
+    return false;
+  }
+
+  function enqueuePersist(taskName, taskFn) {
+    persistQueue = persistQueue
+      .then(async () => {
+        try {
+          await taskFn();
+        } catch (error) {
+          console.error(`${LOG_PREFIX} Persist task failed: ${taskName}`, error);
+        }
+      })
+      .catch((error) => {
+        console.error(`${LOG_PREFIX} Persist queue error: ${taskName}`, error);
+      });
+
+    return persistQueue;
+  }
+
+  function persistFullState(options = {}) {
+    const { silent = false, reason = "update" } = options;
+
+    return enqueuePersist(`persistFullState:${reason}`, async () => {
+      const payload = buildPropPayload(state);
+
+      if (!validateProjectsSize(payload.projects, { silent })) {
+        return false;
+      }
+
+      if (!widget) {
+        console.log(`${LOG_PREFIX} Skipping Wix persist (dev mode). Reason: ${reason}`);
+        return true;
+      }
+
+      await Promise.all(
+        Object.entries(payload).map(([key, value]) => setProp(key, value))
+      );
+
+      return true;
     });
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // Init
-  // ─────────────────────────────────────────────────────────────────────────
-
-  init();
-
-  async function init() {
-    await loadStateFromWidget();
-
-    wireNavigation();
-    wireActions();
-    wireEditorFields();
-    wireDesignControls();
-    wireResponsivePreview();
-    setView(getInitialView());
-    renderAll();
-  }
-
-  /**
-   * Replaces bootstrapWixState() + loadStateFromWixProps().
-   * Asks the widget for its current state via postMessage.
-   * If the widget has no saved state yet, pushes the defaults to it.
-   */
-  async function loadStateFromWidget() {
-    const widgetState = await requestWidgetState();
-
-    if (!widgetState) {
-      // Widget had nothing — use defaults and push them to it
-      state = structuredClone(DEFAULT_STATE);
-      _pushStateToWidget(state, { bootstrap: true });
-      return;
+  function commit(render = true, reason = "commit") {
+    if (!isHydrating) {
+      void persistFullState({ reason });
     }
-
-    // Hydrate local state from what the widget reported back
-    state = structuredClone(DEFAULT_STATE);
-
-    // Projects — widget stores them as normalised objects
-    if (Array.isArray(widgetState.projects) && widgetState.projects.length) {
-      state.projects = widgetState.projects.map(normalizeProject);
+    if (render) {
+      renderAll();
     }
-
-    // Design config — map widget config keys → panel design keys
-    const d = state.design;
-    const c = widgetState; // shorthand for config fields
-
-    if (c.accent)           d.accentColor     = c.accent;
-    if (c.columns)          d.columns         = Number(c.columns)         || DEFAULT_DESIGN.columns;
-    if (c.gap)              d.cardGap         = Number(c.gap)             || DEFAULT_DESIGN.cardGap;
-    if (c.radius)           d.cardRadius      = Number(c.radius)          || DEFAULT_DESIGN.cardRadius;
-    if (c.cardPanelBg)      d.cardBackground  = c.cardPanelBg;
-    if (c.textPanelStyle)   d.textPanelStyle  = c.textPanelStyle;
-    if (c.overlayStrength != null) d.overlayStrength = Number(c.overlayStrength);
-    if (c.showCategory != null)    d.showCategory    = Boolean(c.showCategory);
-    if (c.showFilters  != null)    d.showFilters     = Boolean(c.showFilters);
-    if (c.enableModal  != null)    d.enableModal     = Boolean(c.enableModal);
-    if (c.modalImageFit)    d.modalImageFit   = c.modalImageFit;
-    if (c.titleSize)        d.titleSize       = mapPresetToSliderValue(c.titleSize);
-    if (c.descSize)         d.metaSize        = mapPresetToSliderValue(c.descSize);
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // Saving — replaces syncStateToWix
-  // ─────────────────────────────────────────────────────────────────────────
-
-  function saveState() {
-    clearTimeout(saveTimeout);
-    saveTimeout = setTimeout(() => {
-      _pushStateToWidget(state);
-    }, 300); // 300ms debounce — same as original
+  function renderPreview() {
+    renderDesignPreview();
   }
-
-  /**
-   * Converts the panel's internal state format into the widget's attribute
-   * format and sends the whole lot in a single SET_ALL_PROPS message.
-   *
-   * @param {object}  sourceState  - panel state object to push
-   * @param {object}  options
-   * @param {boolean} options.bootstrap - if true, silently ignore size errors
-   */
-  function _pushStateToWidget(sourceState = state, options = {}) {
-    const { bootstrap = false } = options;
-
-    const projectsJson = JSON.stringify(sourceState.projects);
-
-    if (projectsJson.length > 40000) {
-      console.warn("[ProFilterGallery] Projects data too large for widget props.");
-      if (!bootstrap) showToast("Projects are too large to save. Use image URLs only.");
-      return;
-    }
-
-    const props = {
-      projects:       projectsJson,
-      accent:         String(sourceState.design.accentColor   || "#7c9cff"),
-      columns:        String(sourceState.design.columns        ?? 3),
-      gap:            String(sourceState.design.cardGap        ?? 16),
-      radius:         String(sourceState.design.cardRadius     ?? 20),
-      cardpanelbg:    String(sourceState.design.cardBackground || "#111722"),
-      textpanelstyle: String(sourceState.design.textPanelStyle || "fade"),
-      overlaystrength:String(sourceState.design.overlayStrength ?? 72),
-      showcategory:   String(!!sourceState.design.showCategory),
-      showfilters:    String(!!sourceState.design.showFilters),
-      enablemodal:    String(!!sourceState.design.enableModal),
-      titlesize:      mapSliderToSizePreset(sourceState.design.titleSize),
-      descsize:       mapSliderToSizePreset(sourceState.design.metaSize),
-      categorysize:   Number(sourceState.design.metaSize) <= 10 ? "small" : "medium",
-      modalimagefit:  String(sourceState.design.modalImageFit  || "cover")
-    };
-
-    setAllProps(props);
-  }
-
-  // ─────────────────────────────────────────────────────────────────────────
-  // Project helpers
-  // ─────────────────────────────────────────────────────────────────────────
 
   function ensureSelectedProject() {
-    if (!state.projects.length) { selectedProjectId = null; return; }
-    const exists = state.projects.some(p => p.id === selectedProjectId);
-    if (!selectedProjectId || !exists) selectedProjectId = state.projects[0].id;
+    if (!state.projects.length) {
+      selectedProjectId = null;
+      return;
+    }
+    const exists = state.projects.some((p) => p.id === selectedProjectId);
+    if (!selectedProjectId || !exists) {
+      selectedProjectId = state.projects[0].id;
+    }
   }
 
   function getInitialView() {
     const active = document.querySelector(".view.active");
-    if (active?.id === "view-hub")     return "hub";
-    if (active?.id === "view-design")  return "design";
+    if (active?.id === "view-hub") return "hub";
+    if (active?.id === "view-design") return "design";
     if (active?.id === "view-content") return "content";
     return "hub";
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // Navigation
-  // ─────────────────────────────────────────────────────────────────────────
-
   function wireNavigation() {
-    document.querySelectorAll("[data-view-target]").forEach(btn => {
+    document.querySelectorAll("[data-view-target]").forEach((btn) => {
       btn.addEventListener("click", () => setView(btn.dataset.viewTarget));
     });
-    document.querySelectorAll("[data-go]").forEach(btn => {
+
+    document.querySelectorAll("[data-go]").forEach((btn) => {
       btn.addEventListener("click", () => setView(btn.dataset.go));
     });
   }
@@ -268,24 +386,20 @@ document.addEventListener("DOMContentLoaded", () => {
   function setView(view) {
     activeView = view;
 
-    document.querySelectorAll(".view").forEach(v => v.classList.remove("active"));
+    document.querySelectorAll(".view").forEach((v) => v.classList.remove("active"));
     const target = document.getElementById(`view-${view}`);
     if (target) target.classList.add("active");
 
-    document.querySelectorAll(".rail-btn").forEach(btn => {
+    document.querySelectorAll(".rail-btn").forEach((btn) => {
       btn.classList.remove("active");
       if (btn.dataset.viewTarget === view) btn.classList.add("active");
     });
 
-    document.querySelectorAll(".mobile-nav-btn").forEach(btn => {
+    document.querySelectorAll(".mobile-nav-btn").forEach((btn) => {
       btn.classList.remove("active");
       if (btn.dataset.viewTarget === view) btn.classList.add("active");
     });
   }
-
-  // ─────────────────────────────────────────────────────────────────────────
-  // Actions
-  // ─────────────────────────────────────────────────────────────────────────
 
   function wireActions() {
     byId("newProjectBtn")?.addEventListener("click", createProject);
@@ -299,13 +413,13 @@ document.addEventListener("DOMContentLoaded", () => {
     byId("coverUploadBtn")?.addEventListener("click", () => {
       showToast("For marketplace-safe use, please paste an image URL instead of uploading a file.");
     });
+
     byId("galleryUploadBtn")?.addEventListener("click", () => {
       showToast("For marketplace-safe use, please paste image URLs instead of uploading files.");
     });
 
     byId("coverImageUpload")?.addEventListener("change", handleCoverUpload);
     byId("galleryImageUpload")?.addEventListener("change", handleGalleryUpload);
-
     byId("addGalleryUrlBtn")?.addEventListener("click", addGalleryUrl);
     byId("importCsvBtn")?.addEventListener("click", () => byId("csvFileInput")?.click());
     byId("csvFileInput")?.addEventListener("change", importCSV);
@@ -313,88 +427,80 @@ document.addEventListener("DOMContentLoaded", () => {
     byId("downloadCsvTemplateBtn")?.addEventListener("click", exportCSVTemplate);
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // Editor fields
-  // ─────────────────────────────────────────────────────────────────────────
-
   function wireEditorFields() {
-    byId("projectTitle")?.addEventListener("input", e => {
-      const project = getSelectedProject();
-      if (!project) return;
-      project.title = e.target.value;
-      commit();
+    byId("projectTitle")?.addEventListener("input", (e) => {
+      const p = getSelectedProject();
+      if (!p) return;
+      p.title = e.target.value;
+      commit(true, "project-title");
     });
 
-    byId("projectCategory")?.addEventListener("input", e => {
-      const project = getSelectedProject();
-      if (!project) return;
-      project.category = e.target.value;
-      commit();
+    byId("projectCategory")?.addEventListener("input", (e) => {
+      const p = getSelectedProject();
+      if (!p) return;
+      p.category = e.target.value;
+      commit(true, "project-category");
     });
 
-    byId("projectModalImageFit")?.addEventListener("change", e => {
-      const project = getSelectedProject();
-      if (!project) return;
-      project.modalImageFit = e.target.value;
-      commit();
+    byId("projectModalImageFit")?.addEventListener("change", (e) => {
+      const p = getSelectedProject();
+      if (!p) return;
+      p.modalImageFit = e.target.value;
+      commit(true, "project-modal-fit");
     });
 
-    byId("projectDescription")?.addEventListener("input", e => {
-      const project = getSelectedProject();
-      if (!project) return;
-      project.description = e.target.value;
-      commit();
+    byId("projectDescription")?.addEventListener("input", (e) => {
+      const p = getSelectedProject();
+      if (!p) return;
+      p.description = e.target.value;
+      commit(true, "project-description");
     });
 
-    byId("projectVisible")?.addEventListener("change", e => {
-      const project = getSelectedProject();
-      if (!project) return;
-      project.visible = e.target.checked;
-      commit();
+    byId("projectVisible")?.addEventListener("change", (e) => {
+      const p = getSelectedProject();
+      if (!p) return;
+      p.visible = e.target.checked;
+      commit(true, "project-visible");
     });
 
-    byId("coverImageUrl")?.addEventListener("input", e => {
-      const project = getSelectedProject();
-      if (!project) return;
-      project.coverImage = e.target.value.trim();
-      saveState();
+    byId("coverImageUrl")?.addEventListener("input", (e) => {
+      const p = getSelectedProject();
+      if (!p) return;
+      p.coverImage = e.target.value.trim();
+      void persistFullState({ reason: "project-cover-image" });
       renderCoverPreview();
       renderProjects();
       renderContentSnapshot();
-      renderDesignPreview();
+      renderPreview();
     });
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // Design controls
-  // ─────────────────────────────────────────────────────────────────────────
-
   function wireDesignControls() {
-    bindDesignControl("layoutColumns",  "columns",       "value",   Number);
-    bindDesignControl("cardGap",        "cardGap",       "value",   Number);
-    bindDesignControl("cardRadius",     "cardRadius",    "value",   Number);
-    bindDesignControl("cardBackground", "cardBackground","value",   v => v);
-    bindDesignControl("textPanelStyle", "textPanelStyle","value",   v => v);
-    bindDesignControl("overlayStrength","overlayStrength","value",  Number);
-    bindDesignControl("showCategory",   "showCategory",  "checked", v => v);
-    bindDesignControl("titleSize",      "titleSize",     "value",   Number);
-    bindDesignControl("metaSize",       "metaSize",      "value",   Number);
-    bindDesignControl("showFilters",    "showFilters",   "checked", v => v);
-    bindDesignControl("accentColor",    "accentColor",   "value",   v => v);
-    bindDesignControl("enableModal",    "enableModal",   "checked", v => v);
-    bindDesignControl("modalImageFit",  "modalImageFit", "value",   v => v);
-    bindDesignControl("showGalleryCount","showGalleryCount","checked",v => v);
+    bindDesignControl("layoutColumns", "columns", "value", Number, "design-columns");
+    bindDesignControl("cardGap", "cardGap", "value", Number, "design-gap");
+    bindDesignControl("cardRadius", "cardRadius", "value", Number, "design-radius");
+    bindDesignControl("cardBackground", "cardBackground", "value", (v) => v, "design-card-bg");
+    bindDesignControl("textPanelStyle", "textPanelStyle", "value", (v) => v, "design-text-style");
+    bindDesignControl("overlayStrength", "overlayStrength", "value", Number, "design-overlay-strength");
+    bindDesignControl("showCategory", "showCategory", "checked", (v) => v, "design-show-category");
+    bindDesignControl("titleSize", "titleSize", "value", Number, "design-title-size");
+    bindDesignControl("metaSize", "metaSize", "value", Number, "design-meta-size");
+    bindDesignControl("showFilters", "showFilters", "checked", (v) => v, "design-show-filters");
+    bindDesignControl("accentColor", "accentColor", "value", (v) => v, "design-accent");
+    bindDesignControl("enableModal", "enableModal", "checked", (v) => v, "design-enable-modal");
+    bindDesignControl("modalImageFit", "modalImageFit", "value", (v) => v, "design-modal-fit");
+    bindDesignControl("showGalleryCount", "showGalleryCount", "checked", (v) => v, "design-gallery-count");
   }
 
-  function bindDesignControl(id, key, prop, transform) {
+  function bindDesignControl(id, key, prop, transform, reason) {
     const el = byId(id);
     if (!el) return;
 
     const handler = () => {
       state.design[key] = transform(el[prop]);
-      saveState();
+      void persistFullState({ reason });
       renderDesignControlsFromState();
-      renderDesignPreview();
+      renderPreview();
     };
 
     if (el.type === "checkbox" || el.tagName === "SELECT") {
@@ -404,26 +510,13 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  function commit(render = true) {
-    saveState();
-    if (render) renderAll();
-  }
-
-  // ─────────────────────────────────────────────────────────────────────────
-  // Responsive preview
-  // ─────────────────────────────────────────────────────────────────────────
-
   function wireResponsivePreview() {
     let resizeTimer;
     window.addEventListener("resize", () => {
       clearTimeout(resizeTimer);
-      resizeTimer = setTimeout(() => renderDesignPreview(), 120);
+      resizeTimer = setTimeout(() => renderPreview(), 120);
     });
   }
-
-  // ─────────────────────────────────────────────────────────────────────────
-  // Project CRUD
-  // ─────────────────────────────────────────────────────────────────────────
 
   function createProject() {
     const project = normalizeProject({
@@ -436,45 +529,51 @@ document.addEventListener("DOMContentLoaded", () => {
       modalImageFit: "",
       visible: true
     });
+
     state.projects.unshift(project);
     selectedProjectId = project.id;
-    saveState();
-    renderAll();
+
+    commit(true, "create-project");
     setView("content");
   }
 
   function deleteProject() {
     if (!selectedProjectId) return;
-    state.projects = state.projects.filter(p => p.id !== selectedProjectId);
+
+    state.projects = state.projects.filter((p) => p.id !== selectedProjectId);
     ensureSelectedProject();
-    saveState();
-    renderAll();
+
+    commit(true, "delete-project");
   }
 
   function duplicateProject() {
     const p = getSelectedProject();
     if (!p) return;
-    const copy = normalizeProject({ ...p, id: generateId(), title: `${p.title} Copy`, galleryImages: [...p.galleryImages] });
-    const index = state.projects.findIndex(x => x.id === p.id);
-    state.projects.splice(index + 1, 0, copy);
+
+    const copy = normalizeProject({
+      ...p,
+      id: generateId(),
+      title: `${p.title} Copy`,
+      galleryImages: [...p.galleryImages]
+    });
+
+    state.projects.splice(state.projects.findIndex((x) => x.id === p.id) + 1, 0, copy);
     selectedProjectId = copy.id;
-    saveState();
-    renderAll();
+
+    commit(true, "duplicate-project");
   }
 
   function moveProject(dir) {
-    const index = state.projects.findIndex(p => p.id === selectedProjectId);
+    const index = state.projects.findIndex((p) => p.id === selectedProjectId);
     if (index === -1) return;
+
     const target = index + dir;
     if (target < 0 || target >= state.projects.length) return;
-    [state.projects[index], state.projects[target]] = [state.projects[target], state.projects[index]];
-    saveState();
-    renderAll();
-  }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // Render
-  // ─────────────────────────────────────────────────────────────────────────
+    [state.projects[index], state.projects[target]] = [state.projects[target], state.projects[index]];
+
+    commit(true, "move-project");
+  }
 
   function renderAll() {
     ensureSelectedProject();
@@ -484,7 +583,7 @@ document.addEventListener("DOMContentLoaded", () => {
     renderTopBadge();
     renderContentSnapshot();
     renderDesignControlsFromState();
-    renderDesignPreview();
+    renderPreview();
   }
 
   function renderProjects() {
@@ -494,55 +593,55 @@ document.addEventListener("DOMContentLoaded", () => {
     const query = (byId("projectSearch")?.value || "").trim().toLowerCase();
     list.innerHTML = "";
 
-    const filtered = state.projects.filter(project => {
-      const haystack = `${project.title} ${project.category} ${project.description}`.toLowerCase();
-      return haystack.includes(query);
-    });
+    state.projects
+      .filter((p) => `${p.title} ${p.category} ${p.description}`.toLowerCase().includes(query))
+      .forEach((project) => {
+        const el = document.createElement("button");
+        el.className = "project-row";
+        if (project.id === selectedProjectId) el.classList.add("active");
 
-    filtered.forEach(project => {
-      const el = document.createElement("button");
-      el.className = "project-row";
-      if (project.id === selectedProjectId) el.classList.add("active");
+        const thumb = project.coverImage
+          ? `background-image:url('${escapeAttr(project.coverImage)}');`
+          : "";
 
-      const thumb = project.coverImage ? `background-image:url('${escapeAttr(project.coverImage)}');` : "";
-      el.innerHTML = `
-        <div class="row-thumb" style="${thumb}"></div>
-        <div class="row-copy">
-          <strong>${escapeHtml(project.title)}</strong>
-          <small>${escapeHtml(project.category || "Uncategorised")}</small>
-        </div>
-        <div class="status-dot ${project.visible ? "" : "hidden"}"></div>
-      `;
+        el.innerHTML = `
+          <div class="row-thumb" style="${thumb}"></div>
+          <div class="row-copy">
+            <strong>${escapeHtml(project.title)}</strong>
+            <small>${escapeHtml(project.category || "Uncategorised")}</small>
+          </div>
+          <div class="status-dot ${project.visible ? "" : "hidden"}"></div>
+        `;
 
-      el.addEventListener("click", () => {
-        selectedProjectId = project.id;
-        renderAll();
+        el.addEventListener("click", () => {
+          selectedProjectId = project.id;
+          renderAll();
+        });
+
+        list.appendChild(el);
       });
-
-      list.appendChild(el);
-    });
   }
 
   function renderEditor() {
-    const empty   = byId("editorEmpty");
+    const empty = byId("editorEmpty");
     const content = byId("editorContent");
     const project = getSelectedProject();
 
     if (!project) {
-      if (empty)   empty.style.display   = "grid";
+      if (empty) empty.style.display = "grid";
       if (content) content.style.display = "none";
       return;
     }
 
-    if (empty)   empty.style.display   = "none";
+    if (empty) empty.style.display = "none";
     if (content) content.style.display = "block";
 
-    setIfExists("projectTitle",          project.title        || "");
-    setIfExists("projectCategory",       project.category     || "");
-    setIfExists("projectModalImageFit",  project.modalImageFit || "");
-    setIfExists("projectDescription",    project.description  || "");
+    setIfExists("projectTitle", project.title || "");
+    setIfExists("projectCategory", project.category || "");
+    setIfExists("projectModalImageFit", project.modalImageFit || "");
+    setIfExists("projectDescription", project.description || "");
     setCheckedIfExists("projectVisible", !!project.visible);
-    setIfExists("coverImageUrl",         project.coverImage   || "");
+    setIfExists("coverImageUrl", project.coverImage || "");
 
     renderCoverPreview();
     renderGalleryThumbs();
@@ -552,26 +651,30 @@ document.addEventListener("DOMContentLoaded", () => {
     const project = getSelectedProject();
     const preview = byId("coverPreview");
     if (!project || !preview) return;
-    preview.style.backgroundImage = project.coverImage ? `url('${project.coverImage}')` : "none";
+
+    preview.style.backgroundImage = project.coverImage
+      ? `url('${project.coverImage}')`
+      : "none";
   }
 
   function renderGalleryThumbs() {
-    const project   = getSelectedProject();
+    const project = getSelectedProject();
     const container = byId("galleryThumbs");
     if (!project || !container) return;
 
     container.innerHTML = "";
+
     project.galleryImages.forEach((url, index) => {
-      const item   = document.createElement("div");
+      const item = document.createElement("div");
       item.className = "img-chip";
       item.style.backgroundImage = `url('${url}')`;
 
       const remove = document.createElement("button");
-      remove.type        = "button";
+      remove.type = "button";
       remove.textContent = "×";
       remove.addEventListener("click", () => {
         project.galleryImages.splice(index, 1);
-        commit();
+        commit(true, "remove-gallery-image");
       });
 
       item.appendChild(remove);
@@ -580,47 +683,44 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function renderStats() {
-    const total   = state.projects.length;
-    const visible = state.projects.filter(p => p.visible).length;
-    if (byId("statProjects")) byId("statProjects").innerText = total;
-    if (byId("statVisible"))  byId("statVisible").innerText  = visible;
+    if (byId("statProjects")) byId("statProjects").innerText = state.projects.length;
+    if (byId("statVisible")) byId("statVisible").innerText = state.projects.filter((p) => p.visible).length;
   }
 
   function renderTopBadge() {
     const badge = byId("projectCountBadge");
-    if (badge) badge.textContent = `${state.projects.length} Project${state.projects.length === 1 ? "" : "s"}`;
+    if (badge) {
+      badge.textContent = `${state.projects.length} Project${state.projects.length === 1 ? "" : "s"}`;
+    }
   }
 
   function renderContentSnapshot() {
-    const lastEdited    = byId("snapshotLastEdited");
+    const lastEdited = byId("snapshotLastEdited");
     const categoryCount = byId("snapshotCategoryCount");
-    const hiddenCount   = byId("snapshotHiddenCount");
-    const previews      = byId("snapshotPreviews");
-
+    const hiddenCount = byId("snapshotHiddenCount");
+    const previews = byId("snapshotPreviews");
     if (!lastEdited || !categoryCount || !hiddenCount || !previews) return;
 
-    const categories      = [...new Set(state.projects.map(p => p.category).filter(Boolean))];
-    const hiddenProjects  = state.projects.filter(p => !p.visible);
+    const categories = [...new Set(state.projects.map((p) => p.category).filter(Boolean))];
 
-    lastEdited.textContent    = state.projects[0]?.title || "—";
+    lastEdited.textContent = state.projects[0]?.title || "—";
     categoryCount.textContent = categories.length;
-    hiddenCount.textContent   = hiddenProjects.length;
-
+    hiddenCount.textContent = state.projects.filter((p) => !p.visible).length;
     previews.innerHTML = "";
-    state.projects.slice(0, 2).forEach(project => {
-      const card  = document.createElement("div");
+
+    state.projects.slice(0, 2).forEach((project) => {
+      const card = document.createElement("div");
       card.className = "snapshot-card";
 
       const thumb = document.createElement("div");
       thumb.className = "thumb";
-      if (project.coverImage) thumb.style.backgroundImage = `url('${project.coverImage}')`;
+      if (project.coverImage) {
+        thumb.style.backgroundImage = `url('${project.coverImage}')`;
+      }
 
       const copy = document.createElement("div");
       copy.className = "copy";
-      copy.innerHTML = `
-        <strong>${escapeHtml(project.title || "Untitled Project")}</strong>
-        <small>${escapeHtml(project.category || "Uncategorised")}</small>
-      `;
+      copy.innerHTML = `<strong>${escapeHtml(project.title || "Untitled")}</strong><small>${escapeHtml(project.category || "Uncategorised")}</small>`;
 
       card.appendChild(thumb);
       card.appendChild(copy);
@@ -629,13 +729,13 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function renderDesignControlsFromState() {
-    setIfExists("layoutColumns",  state.design.columns);
+    setIfExists("layoutColumns", state.design.columns);
     setTextIfExists("layoutColumnsValue", state.design.columns);
 
-    setIfExists("cardGap",        state.design.cardGap);
+    setIfExists("cardGap", state.design.cardGap);
     setTextIfExists("cardGapValue", state.design.cardGap);
 
-    setIfExists("cardRadius",     state.design.cardRadius);
+    setIfExists("cardRadius", state.design.cardRadius);
     setTextIfExists("cardRadiusValue", state.design.cardRadius);
 
     setIfExists("cardBackground", state.design.cardBackground);
@@ -646,102 +746,102 @@ document.addEventListener("DOMContentLoaded", () => {
 
     setCheckedIfExists("showCategory", state.design.showCategory);
 
-    setIfExists("titleSize",  state.design.titleSize);
+    setIfExists("titleSize", state.design.titleSize);
     setTextIfExists("titleSizeValue", state.design.titleSize);
 
-    setIfExists("metaSize",   state.design.metaSize);
+    setIfExists("metaSize", state.design.metaSize);
     setTextIfExists("metaSizeValue", state.design.metaSize);
 
-    setCheckedIfExists("showFilters",      state.design.showFilters);
-    setIfExists("accentColor",             state.design.accentColor);
-    setCheckedIfExists("enableModal",      state.design.enableModal);
-    setIfExists("modalImageFit",           state.design.modalImageFit || "cover");
+    setCheckedIfExists("showFilters", state.design.showFilters);
+    setIfExists("accentColor", state.design.accentColor);
+    setCheckedIfExists("enableModal", state.design.enableModal);
+    setIfExists("modalImageFit", state.design.modalImageFit || "cover");
     setCheckedIfExists("showGalleryCount", state.design.showGalleryCount);
   }
 
   function renderDesignPreview() {
-    const previewGrid    = byId("previewGrid");
+    const previewGrid = byId("previewGrid");
     const previewFilters = byId("previewFilters");
     const galleryPreview = byId("galleryPreview");
 
     if (!previewGrid || !previewFilters) return;
 
-    const visibleProjects = state.projects.filter(p => p.visible);
-    const categories      = [...new Set(visibleProjects.map(p => p.category).filter(Boolean))];
+    const visibleProjects = state.projects.filter((p) => p.visible);
+    const categories = [...new Set(visibleProjects.map((p) => p.category).filter(Boolean))];
 
     previewFilters.innerHTML = "";
-    previewGrid.innerHTML    = "";
+    previewGrid.innerHTML = "";
 
     const isMobile = window.innerWidth <= 640;
     const isTablet = window.innerWidth <= 980;
 
-    if (isMobile) {
-      previewGrid.style.gridTemplateColumns = "1fr";
-    } else if (isTablet) {
-      previewGrid.style.gridTemplateColumns = "repeat(2, minmax(0, 1fr))";
-    } else {
-      previewGrid.style.gridTemplateColumns = `repeat(${state.design.columns}, minmax(0, 1fr))`;
-    }
+    previewGrid.style.gridTemplateColumns = isMobile
+      ? "1fr"
+      : isTablet
+      ? "repeat(2, minmax(0, 1fr))"
+      : `repeat(${state.design.columns}, minmax(0, 1fr))`;
+
     previewGrid.style.gap = `${state.design.cardGap}px`;
 
     if (state.design.showFilters) {
       const allChip = document.createElement("span");
       allChip.className = "chip active";
       allChip.textContent = "All";
-      allChip.style.background    = `linear-gradient(135deg, ${hexToRgba(state.design.accentColor, 0.28)}, rgba(255,255,255,.06))`;
-      allChip.style.borderColor   = hexToRgba(state.design.accentColor, 0.35);
+      allChip.style.background = `linear-gradient(135deg, ${hexToRgba(state.design.accentColor, 0.28)}, rgba(255,255,255,.06))`;
+      allChip.style.borderColor = hexToRgba(state.design.accentColor, 0.35);
       previewFilters.appendChild(allChip);
 
-      categories.forEach(category => {
+      categories.forEach((cat) => {
         const chip = document.createElement("span");
-        chip.className   = "chip";
-        chip.textContent = category;
+        chip.className = "chip";
+        chip.textContent = cat;
         previewFilters.appendChild(chip);
       });
     }
 
-    const previewProjects = (isMobile || isTablet)
-      ? visibleProjects.slice(0, 3)
-      : visibleProjects;
-
-    previewProjects.forEach(project => {
+    ((isMobile || isTablet) ? visibleProjects.slice(0, 3) : visibleProjects).forEach((project) => {
       const item = document.createElement("article");
       item.className = "gallery-item";
       item.style.borderRadius = `${state.design.cardRadius}px`;
-      item.style.background   = state.design.cardBackground;
+      item.style.background = state.design.cardBackground;
 
       const thumb = document.createElement("div");
       thumb.className = "gallery-thumb";
-      if (project.coverImage) thumb.style.backgroundImage = `url('${project.coverImage}')`;
+      if (project.coverImage) {
+        thumb.style.backgroundImage = `url('${project.coverImage}')`;
+      }
 
       const overlay = document.createElement("div");
       overlay.className = "gallery-overlay";
-      overlay.style.background = state.design.textPanelStyle === "fade"
-        ? `linear-gradient(180deg, transparent 28%, rgba(5,7,11,${state.design.overlayStrength / 100}) 100%)`
-        : "none";
+      overlay.style.background =
+        state.design.textPanelStyle === "fade"
+          ? `linear-gradient(180deg, transparent 28%, rgba(5,7,11,${state.design.overlayStrength / 100}) 100%)`
+          : "none";
 
       const copy = document.createElement("div");
       copy.className = "gallery-copy";
 
       if (state.design.textPanelStyle === "solid") {
-        copy.style.background = `rgba(16,17,23, ${Math.max(0.25, Math.min(1, state.design.overlayStrength / 100))})`;
-        copy.style.borderTop  = "1px solid rgba(255,255,255,0.06)";
+        copy.style.background = `rgba(16,17,23,${Math.max(0.25, Math.min(1, state.design.overlayStrength / 100))})`;
+        copy.style.borderTop = "1px solid rgba(255,255,255,0.06)";
       }
 
-      const title = document.createElement("strong");
-      title.textContent  = project.title || "Untitled Project";
-      title.style.fontSize = `${state.design.titleSize}px`;
-      copy.appendChild(title);
+      const titleEl = document.createElement("strong");
+      titleEl.textContent = project.title || "Untitled Project";
+      titleEl.style.fontSize = `${state.design.titleSize}px`;
+      copy.appendChild(titleEl);
 
-      let metaText = "";
-      if (state.design.showCategory)    metaText = project.category || "Uncategorised";
+      let metaText = state.design.showCategory ? (project.category || "Uncategorised") : "";
+
       if (state.design.showGalleryCount && project.galleryImages?.length) {
-        metaText += metaText ? ` • ${project.galleryImages.length} images` : `${project.galleryImages.length} images`;
+        metaText += metaText
+          ? ` • ${project.galleryImages.length} images`
+          : `${project.galleryImages.length} images`;
       }
 
       if (metaText) {
         const meta = document.createElement("small");
-        meta.textContent    = metaText;
+        meta.textContent = metaText;
         meta.style.fontSize = `${state.design.metaSize}px`;
         copy.appendChild(meta);
       }
@@ -757,44 +857,43 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // File / URL handlers
-  // ─────────────────────────────────────────────────────────────────────────
-
   function handleCoverUpload(e) {
     e.target.value = "";
-    showToast("File uploads are disabled for this Wix-compliant version. Please paste an image URL instead.");
+    showToast("File uploads disabled. Please paste an image URL instead.");
   }
 
   function handleGalleryUpload(e) {
     e.target.value = "";
-    showToast("File uploads are disabled for this Wix-compliant version. Please add image URLs instead.");
+    showToast("File uploads disabled. Please paste image URLs instead.");
   }
 
   function addGalleryUrl() {
-    const input   = byId("galleryUrlInput");
-    const project = getSelectedProject();
-    if (!input || !project) return;
+    const input = byId("galleryUrlInput");
+    const p = getSelectedProject();
+    if (!input || !p) return;
+
     const url = input.value.trim();
     if (!url) return;
-    project.galleryImages.push(url);
-    input.value = "";
-    commit();
-  }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // CSV import / export
-  // ─────────────────────────────────────────────────────────────────────────
+    p.galleryImages.push(url);
+    input.value = "";
+
+    commit(true, "add-gallery-url");
+  }
 
   function exportCSVTemplate() {
     const rows = [
       ["# Pro Filter Gallery CSV Template"],
-      ["# galleryImages should be separated with | and visible should be true or false"],
+      ["# galleryImages separated with |, visible is true or false"],
       ["title", "category", "description", "coverImage", "galleryImages", "visible"],
       ["Studio Direction", "Branding", "A premium identity system.", "https://example.com/cover-1.jpg", "https://example.com/g-1.jpg|https://example.com/g-2.jpg", "true"],
-      ["Luxury Commerce",  "Web",      "A high-end e-commerce interface.", "https://example.com/cover-2.jpg", "https://example.com/g-3.jpg", "true"]
+      ["Luxury Commerce", "Web", "A high-end e-commerce interface.", "https://example.com/cover-2.jpg", "https://example.com/g-3.jpg", "true"]
     ];
-    download("pro-filter-gallery-template.csv", rows.map(r => r.map(csvEscape).join(",")).join("\n"));
+
+    download(
+      "pro-filter-gallery-template.csv",
+      rows.map((r) => r.map(csvEscape).join(",")).join("\n")
+    );
   }
 
   function importCSV(e) {
@@ -802,39 +901,45 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!file) return;
 
     const reader = new FileReader();
+
     reader.onload = () => {
       const lines = String(reader.result)
         .split(/\r?\n/)
-        .map(l => l.trim())
+        .map((l) => l.trim())
         .filter(Boolean)
-        .filter(l => !l.startsWith("#"));
+        .filter((l) => !l.startsWith("#"));
 
       if (lines.length < 2) return;
 
-      const rows       = lines.map(parseCSVLine);
-      const headers    = rows[0];
-      const headerMap  = {
-        title:         headers.indexOf("title"),
-        category:      headers.indexOf("category"),
-        description:   headers.indexOf("description"),
-        coverImage:    headers.indexOf("coverImage"),
-        galleryImages: headers.indexOf("galleryImages"),
-        visible:       headers.indexOf("visible")
+      const rows = lines.map(parseCSVLine);
+      const h = rows[0];
+
+      const hm = {
+        title: h.indexOf("title"),
+        category: h.indexOf("category"),
+        description: h.indexOf("description"),
+        coverImage: h.indexOf("coverImage"),
+        galleryImages: h.indexOf("galleryImages"),
+        visible: h.indexOf("visible")
       };
 
-      state.projects = rows.slice(1).map(cols => normalizeProject({
-        id:            generateId(),
-        title:         cols[headerMap.title]        || "",
-        category:      cols[headerMap.category]     || "",
-        description:   cols[headerMap.description]  || "",
-        coverImage:    cols[headerMap.coverImage]   || "",
-        galleryImages: (cols[headerMap.galleryImages] || "").split("|").map(v => v.trim()).filter(Boolean),
-        visible:       String(cols[headerMap.visible] || "").toLowerCase() !== "false"
-      }));
+      state.projects = rows.slice(1).map((cols) =>
+        normalizeProject({
+          id: generateId(),
+          title: cols[hm.title] || "",
+          category: cols[hm.category] || "",
+          description: cols[hm.description] || "",
+          coverImage: cols[hm.coverImage] || "",
+          galleryImages: (cols[hm.galleryImages] || "")
+            .split("|")
+            .map((v) => v.trim())
+            .filter(Boolean),
+          visible: String(cols[hm.visible] || "").toLowerCase() !== "false"
+        })
+      );
 
       ensureSelectedProject();
-      saveState();
-      renderAll();
+      commit(true, "import-csv");
     };
 
     reader.readAsText(file);
@@ -849,10 +954,18 @@ document.addEventListener("DOMContentLoaded", () => {
     for (let i = 0; i < line.length; i++) {
       const char = line[i];
       const next = line[i + 1];
-      if (char === '"' && insideQuotes && next === '"') { current += '"'; i++; }
-      else if (char === '"') { insideQuotes = !insideQuotes; }
-      else if (char === "," && !insideQuotes) { result.push(current); current = ""; }
-      else { current += char; }
+
+      if (char === '"' && insideQuotes && next === '"') {
+        current += '"';
+        i++;
+      } else if (char === '"') {
+        insideQuotes = !insideQuotes;
+      } else if (char === "," && !insideQuotes) {
+        result.push(current);
+        current = "";
+      } else {
+        current += char;
+      }
     }
 
     result.push(current);
@@ -870,6 +983,7 @@ document.addEventListener("DOMContentLoaded", () => {
   function download(name, text) {
     const blob = new Blob([text], { type: "text/csv;charset=utf-8;" });
     const link = document.createElement("a");
+
     if (link.download !== undefined) {
       const url = URL.createObjectURL(blob);
       link.setAttribute("href", url);
@@ -886,24 +1000,22 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // Utility
-  // ─────────────────────────────────────────────────────────────────────────
-
   function getSelectedProject() {
-    return state.projects.find(p => p.id === selectedProjectId);
+    return state.projects.find((p) => p.id === selectedProjectId);
   }
 
   function normalizeProject(project) {
     return {
-      id:            project.id           || generateId(),
-      title:         project.title        || "Untitled Project",
-      category:      project.category     || "Uncategorised",
-      description:   project.description  || "",
-      coverImage:    project.coverImage   || "",
-      galleryImages: Array.isArray(project.galleryImages) ? project.galleryImages.filter(Boolean) : [],
+      id: project.id || generateId(),
+      title: project.title || "Untitled Project",
+      category: project.category || "Uncategorised",
+      description: project.description || "",
+      coverImage: project.coverImage || "",
+      galleryImages: Array.isArray(project.galleryImages)
+        ? project.galleryImages.filter(Boolean)
+        : [],
       modalImageFit: project.modalImageFit || "",
-      visible:       project.visible !== false
+      visible: project.visible !== false
     };
   }
 
@@ -924,27 +1036,60 @@ document.addEventListener("DOMContentLoaded", () => {
     return 16;
   }
 
+  function parseNumber(value, fallback) {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : fallback;
+  }
+
+  function cloneState(value) {
+    if (typeof structuredClone === "function") {
+      return structuredClone(value);
+    }
+    return JSON.parse(JSON.stringify(value));
+  }
+
   function showToast(message) {
     const toast = byId("toast");
-    if (!toast) { console.warn(message); return; }
+    if (!toast) {
+      console.warn(`${LOG_PREFIX} Toast missing:`, message);
+      return;
+    }
+
     toast.textContent = message;
     toast.classList.add("show");
+
     clearTimeout(showToast._timer);
     showToast._timer = setTimeout(() => toast.classList.remove("show"), 2600);
   }
 
-  function byId(id)                { return document.getElementById(id); }
-  function setIfExists(id, value)  { const el = byId(id); if (el) el.value = value; }
-  function setCheckedIfExists(id, value) { const el = byId(id); if (el) el.checked = !!value; }
-  function setTextIfExists(id, value)    { const el = byId(id); if (el) el.textContent = value; }
+  function byId(id) {
+    return document.getElementById(id);
+  }
+
+  function setIfExists(id, v) {
+    const el = byId(id);
+    if (el) el.value = v;
+  }
+
+  function setCheckedIfExists(id, v) {
+    const el = byId(id);
+    if (el) el.checked = !!v;
+  }
+
+  function setTextIfExists(id, v) {
+    const el = byId(id);
+    if (el) el.textContent = v;
+  }
 
   function hexToRgba(hex, alpha) {
-    const clean  = hex.replace("#", "");
-    const bigint = parseInt(clean, 16);
-    const r = (bigint >> 16) & 255;
-    const g = (bigint >> 8)  & 255;
-    const b = bigint & 255;
-    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+    const safeHex = String(hex || "#000000").replace("#", "");
+    const normalized =
+      safeHex.length === 3
+        ? safeHex.split("").map((c) => c + c).join("")
+        : safeHex.padEnd(6, "0").slice(0, 6);
+
+    const b = parseInt(normalized, 16);
+    return `rgba(${(b >> 16) & 255}, ${(b >> 8) & 255}, ${b & 255}, ${alpha})`;
   }
 
   function escapeHtml(str) {
