@@ -113,22 +113,28 @@ document.addEventListener("DOMContentLoaded", async () => {
     try {
       console.log(`${LOG_PREFIX} Initialising Wix Editor SDK...`);
 
-      const sdkModule = await import("https://www.wix.com/sdk-init/sdk-init.js");
+      // Use the Wix-hosted ESM build — same parastorage.com CDN Wix uses internally,
+      // so it is never blocked by CORS inside a Wix editor iframe.
+      const [sdkModule, editorModule] = await Promise.all([
+        import("https://static.parastorage.com/unpkg/@wix/sdk@latest/dist/index.esm.js"),
+        import("https://static.parastorage.com/unpkg/@wix/editor@latest/dist/index.esm.js")
+      ]);
+
       const createClient =
         sdkModule?.createClient ||
         sdkModule?.default?.createClient;
 
-      const editorModule =
-        sdkModule?.editor ||
-        sdkModule?.default?.editor;
+      const widgetModule =
+        editorModule?.widget ||
+        editorModule?.default?.widget;
 
-      if (!createClient || !editorModule?.widget) {
+      if (!createClient || !widgetModule) {
         throw new Error("Wix SDK loaded but widget module was not found.");
       }
 
       const client = createClient({
         modules: {
-          widget: editorModule.widget
+          widget: widgetModule
         }
       });
 
